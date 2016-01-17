@@ -644,13 +644,17 @@ train.default <- function(x, y,
   } else  out$times$prediction <- rep(NA, 3)
   
   ## confidence interval
-  if(!is.null(out$resample)) { 
+  if(!is.null(out$resample)) {
+    L <- merge(out$empInf, out$bestTune)
+    L <- L[ , grepl("^\\.obs", colnames(L)), drop = FALSE]
+    L <- colMeans(L, na.rm = TRUE)
+    
     B <- list(t0 = mean(out$resample[[out$metric]]), 
               t = out$resample[out$metric], 
               R = nrow(out$resample), 
               call = "")
     
-    metricCI <- tryCatch(boot::boot.ci(B, type = "bca", L = out$empInf, conf = conf)$bca[-c(2,3)],
+    metricCI <- tryCatch(boot::boot.ci(B, type = "bca", L = L, conf = conf)$bca[-c(2,3)],
                          warning = function(w) w,
                          error = function(e) e)
     
