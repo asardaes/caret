@@ -644,22 +644,25 @@ train.default <- function(x, y,
   } else  out$times$prediction <- rep(NA, 3)
   
   ## confidence interval
-  B <- list(t0 = mean(out$resample[[out$metric]]), 
-            t = out$resample[out$metric], 
-            R = nrow(out$resample), 
-            call = "")
-  
-  metricCI <- tryCatch(boot::boot.ci(B, type = "bca", L = out$empInf, conf = conf)$bca[-c(2,3)],
-                       warning = function(w) w,
-                       error = function(e) e)
-  
-  if (!inherits(metricCI, "condition")) {
-    metricCI[1] <- round(metricCI[1]*100)
-    metricCI <- c(B$t0, metricCI)
+  if(!is.null(out$resample)) { 
+    B <- list(t0 = mean(out$resample[[out$metric]]), 
+              t = out$resample[out$metric], 
+              R = nrow(out$resample), 
+              call = "")
     
-  } else metricCI <- c(B$t0, NA, NA, NA)
-  
-  names(metricCI) <- c(out$metric, "ConfLevel", "Lower", "Upper")
+    metricCI <- tryCatch(boot::boot.ci(B, type = "bca", L = out$empInf, conf = conf)$bca[-c(2,3)],
+                         warning = function(w) w,
+                         error = function(e) e)
+    
+    if (!inherits(metricCI, "condition")) {
+      metricCI[1] <- round(metricCI[1]*100)
+      metricCI <- c(B$t0, metricCI)
+      
+    } else metricCI <- c(B$t0, NA, NA, NA)
+    
+    names(metricCI) <- c(out$metric, "ConfLevel", "Lower", "Upper")
+    
+  } else metricCI <- NULL
   
   out$metricCI <- metricCI
   
