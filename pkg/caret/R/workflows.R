@@ -41,7 +41,7 @@ expandParameters <- function(fixed, seq)
   out
 }
 
-nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, testing = FALSE, ...)
+nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, metric, testing = FALSE, ...)
 {
   loadNamespace("caret")
   ppp <- list(options = ppOpts)
@@ -226,6 +226,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
     } 
   }
   
+  empInf <- NULL
   if(!is.null(submod))
   {
     ## merge the fixed and seq parameter values together
@@ -246,6 +247,11 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
                         lv = lev,
                         rows = holdoutIndex)
     if(testing) print(head(predicted))
+    if(is.factor(predicted$pred)) {
+      empInf <- as.data.frame(t(numeric(nrow(x))))
+      statFun <- function(df, ids, ...) ctrl$summaryFunction(df[ids, , drop = FALSE])
+      empInf[1, holdoutIndex] <- empinf(data = predicted, statistic = statFun, stype = "i", index = metric)
+    } 
 
     ## same for the class probabilities
     if(ctrl$classProbs)
@@ -311,7 +317,12 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
                                          model = method)
     
     ## if classification, get the confusion matrix
-    if(length(lev) > 1) thisResample <- c(thisResample, flatTable(tmp$pred, tmp$obs))
+    if(length(lev) > 1) {
+      thisResample <- c(thisResample, flatTable(tmp$pred, tmp$obs))
+      empInf <- as.data.frame(t(numeric(nrow(x))))
+      statFun <- function(df, ids, ...) ctrl$summaryFunction(df[ids, , drop = FALSE])
+      empInf[1, holdoutIndex] <- empinf(data = tmp, statistic = statFun, stype = "i", index = metric)
+    } 
     thisResample <- as.data.frame(t(thisResample))
     thisResample <- cbind(thisResample, info$loop[parm,,drop = FALSE])
     
@@ -320,7 +331,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
   
   if(ctrl$verboseIter) progress(printed[parm,,drop = FALSE],
                                 names(resampleIndex), iter, FALSE)
-  list(resamples = thisResample, pred = tmpPred)
+  list(resamples = thisResample, pred = tmpPred, empInf = empInf)
 }
   
   resamples <- rbind.fill(result[names(result) == "resamples"])
@@ -364,7 +375,11 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
     }
   }
   
-  list(performance = out, resamples = resamples, predictions = if(keep_pred) pred else NULL)
+  empInf <- rbind.fill(result[names(result) == "empInf"])
+  if(!is.null(empInf)) empInf <- colMeans(empInf)
+  
+  list(performance = out, resamples = resamples, predictions = if(keep_pred) pred else NULL,
+       empInf = empInf)
 }
 
 

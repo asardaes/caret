@@ -407,7 +407,8 @@ train.default <- function(x, y,
         if(!grepl("adapt", trControl$method)){
           tmp <- nominalTrainWorkflow(x = x, y = y, wts = weights, 
                                       info = trainInfo, method = models,
-                                      ppOpts = preProcess, ctrl = trControl, lev = classLevels, ...)
+                                      ppOpts = preProcess, ctrl = trControl, lev = classLevels, 
+                                      metric = metric, ...)
           performance <- tmp$performance
           resampleResults <- tmp$resample
         } else {
@@ -424,6 +425,8 @@ train.default <- function(x, y,
         }
       }
     }
+    
+    empInf <- tmp$empInf
     
     ## TODO we used to give resampled results for LOO
     if(!(trControl$method %in% c("LOOCV", "oob"))) {
@@ -628,7 +631,8 @@ train.default <- function(x, y,
                         perfNames = perfNames,
                         maximize = maximize,
                         yLimits = trControl$yLimits,
-                        times = times), 
+                        times = times,
+                        empInf = empInf), 
                    class = "train")
   trControl$yLimits <- NULL
   

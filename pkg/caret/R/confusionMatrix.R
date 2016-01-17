@@ -201,13 +201,30 @@ confusionMatrix.train <- function(data, norm = "overall", dnn = c("Prediction", 
   overall <- matrix(apply(counts, 2, mean), nrow = length(lev))
   rownames(overall) <- colnames(overall) <- lev
   if(norm != "none") overall <- overall*100
-  names(dimnames(overall)) <- dnn
+  names(dimnames(overall)) <- dnn  
   
+  ## confidence interval
+  B <- list(t0 = mean(data$resample[[data$metric]]), 
+            t = data$resample[data$metric], 
+            R = nrow(data$resample), 
+            call = "")
+  metricCI <- tryCatch(boot::boot.ci(B, type = "bca", L = data$empInf, ...)$bca[-c(2,3)],
+                       warning = function(w) w,
+                       error = function(e) e)
+  if (!inherits(metricCI, "condition")) {
+    metricCI[1] <- round(metricCI[1]*100)
+    metricCI <- c(B$t0, metricCI)
+    
+  } else metricCI <- c(B$t0, NA, NA, NA)
   
+  names(metricCI) <- c(data$metric, "ConfLevel", "Lower", "Upper")
+  
+  ## out
   out <- list(table = as.table(overall),
               norm = norm,
               B = length(data$control$index),
-              text = paste(resampText, "Confusion Matrix"))
+              text = paste(resampText, "Confusion Matrix"),
+              metricCI = metricCI)
   class(out) <- "confusionMatrix.train"
   out
 }
@@ -223,8 +240,24 @@ print.confusionMatrix.train <- function(x, digits = 1, ...)
                      byClass = "\n(entries are percentages within the reference class)\n",
                      "")
   cat(normText, "\n")
-  if(x$norm == "none" & x$B == 1) print(getFromNamespace("confusionMatrix.table", "caret")(x$table)) else print(round(x$table, digits))
-  cat("\n")
+  if(x$norm == "none" & x$B == 1) {
+    print(getFromNamespace("confusionMatrix.table", "caret")(x$table)) 
+  } else {
+    print(round(x$table, digits)) 
+    if(!is.null(x$metricCI)) {
+      metricCI <- formatC(x$metricCI)
+
+      if(!is.na(x$metricCI[2])) {
+        lhs <- paste(c(names(metricCI)[1], paste0(metricCI[2], "% CI")), ":")
+        lhs <- format(lhs, justify = "right")
+        out <- cbind(lhs, c(metricCI[1], paste0("(", metricCI[3], ", ", metricCI[4], ")")))
+      } else out <- cbind(names(metricCI)[1], ":", metricCI[1])
+
+      dimnames(out) <- list(rep("", nrow(out)), rep("", ncol(out)))
+      print(out, quote = FALSE)
+    }
+    cat("\n")
+  }
   invisible(x)
 }
 
