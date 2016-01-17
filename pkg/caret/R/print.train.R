@@ -193,6 +193,15 @@ stringFunc <- function (x)  {
       cat(truncateText(optString), "\n")
     } else printMat <- NULL
     
+    if(!is.null(x$metricCI) && !is.na(x$metricCI[2])) {
+      metricCI <- formatC(x$metricCI)
+      lhs <- paste(c(names(metricCI)[1], paste0(metricCI[2], "% CI")), ":")
+      lhs <- format(lhs, justify = "right")
+      out <- cbind(lhs, c(metricCI[1], paste0("(", metricCI[3], ", ", metricCI[4], ")")))
+      dimnames(out) <- list(rep("", nrow(out)), rep("", ncol(out)))
+      print(out, quote = FALSE)
+    }
+    
     if(details) {
       if(!(x$method %in% c("gbm", "treebag", "nb", "lvq", "knn"))) {
         cat("\n----------------------------------------------------------\n")

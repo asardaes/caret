@@ -226,7 +226,6 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     } 
   }
   
-  empInf <- NULL
   if(!is.null(submod))
   {
     ## merge the fixed and seq parameter values together
@@ -247,11 +246,12 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
                         lv = lev,
                         rows = holdoutIndex)
     if(testing) print(head(predicted))
-    if(is.factor(predicted$pred)) {
-      empInf <- as.data.frame(t(numeric(nrow(x))))
-      statFun <- function(df, ids, ...) ctrl$summaryFunction(df[ids, , drop = FALSE])
-      empInf[1, holdoutIndex] <- empinf(data = predicted, statistic = statFun, stype = "i", index = metric)
-    } 
+    
+    empInf <- as.data.frame(matrix(0, nrow = NROW(allParam), ncol = nrow(x)))
+    statFun <- function(df, ids, ...) ctrl$summaryFunction(df[ids, , drop = FALSE])
+    empInf[, holdoutIndex] <- do.call(rbind, lapply(predicted, function(df) {
+      boot::empinf(data = df, statistic = statFun, stype = "i", index = metric)
+    }))
 
     ## same for the class probabilities
     if(ctrl$classProbs)
@@ -317,14 +317,13 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
                                          model = method)
     
     ## if classification, get the confusion matrix
-    if(length(lev) > 1) {
-      thisResample <- c(thisResample, flatTable(tmp$pred, tmp$obs))
-      empInf <- as.data.frame(t(numeric(nrow(x))))
-      statFun <- function(df, ids, ...) ctrl$summaryFunction(df[ids, , drop = FALSE])
-      empInf[1, holdoutIndex] <- empinf(data = tmp, statistic = statFun, stype = "i", index = metric)
-    } 
+    if(length(lev) > 1) thisResample <- c(thisResample, flatTable(tmp$pred, tmp$obs))
     thisResample <- as.data.frame(t(thisResample))
     thisResample <- cbind(thisResample, info$loop[parm,,drop = FALSE])
+    
+    empInf <- as.data.frame(t(numeric(nrow(x))))
+    statFun <- function(df, ids, ...) ctrl$summaryFunction(df[ids, , drop = FALSE])
+    empInf[1, holdoutIndex] <- boot::empinf(data = tmp, statistic = statFun, stype = "i", index = metric)
     
   }
   thisResample$Resample <- names(resampleIndex)[iter]

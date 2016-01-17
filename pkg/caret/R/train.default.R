@@ -12,7 +12,8 @@ train.default <- function(x, y,
                           maximize = ifelse(metric %in% c("RMSE", "logLoss"), FALSE, TRUE),
                           trControl = trainControl(),
                           tuneGrid = NULL,
-                          tuneLength = 3) {
+                          tuneLength = 3,
+                          conf = 0.95) {
   startTime <- proc.time()
   
   if(is.character(y)) y <- as.factor(y)
@@ -641,8 +642,29 @@ train.default <- function(x, y,
     pData <- as.data.frame(pData)
     out$times$prediction <- system.time(predict(out, pData))
   } else  out$times$prediction <- rep(NA, 3)
-  out
   
+  ## confidence interval
+  B <- list(t0 = mean(out$resample[[out$metric]]), 
+            t = out$resample[out$metric], 
+            R = nrow(out$resample), 
+            call = "")
+  
+  metricCI <- tryCatch(boot::boot.ci(B, type = "bca", L = out$empInf, conf = conf)$bca[-c(2,3)],
+                       warning = function(w) w,
+                       error = function(e) e)
+  
+  if (!inherits(metricCI, "condition")) {
+    metricCI[1] <- round(metricCI[1]*100)
+    metricCI <- c(B$t0, metricCI)
+    
+  } else metricCI <- c(B$t0, NA, NA, NA)
+  
+  names(metricCI) <- c(out$metric, "ConfLevel", "Lower", "Upper")
+  
+  out$metricCI <- metricCI
+  
+  ## out
+  out
 }
 
 train.formula <- function (form, data, ..., weights, subset, na.action = na.fail, contrasts = NULL)  {

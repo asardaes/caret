@@ -208,9 +208,11 @@ confusionMatrix.train <- function(data, norm = "overall", dnn = c("Prediction", 
             t = data$resample[data$metric], 
             R = nrow(data$resample), 
             call = "")
+  
   metricCI <- tryCatch(boot::boot.ci(B, type = "bca", L = data$empInf, ...)$bca[-c(2,3)],
                        warning = function(w) w,
                        error = function(e) e)
+  
   if (!inherits(metricCI, "condition")) {
     metricCI[1] <- round(metricCI[1]*100)
     metricCI <- c(B$t0, metricCI)
