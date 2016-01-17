@@ -204,22 +204,29 @@ confusionMatrix.train <- function(data, norm = "overall", dnn = c("Prediction", 
   names(dimnames(overall)) <- dnn  
   
   ## confidence interval
-  B <- list(t0 = mean(data$resample[[data$metric]]), 
-            t = data$resample[data$metric], 
-            R = nrow(data$resample), 
-            call = "")
-  
-  metricCI <- tryCatch(boot::boot.ci(B, type = "bca", L = data$empInf, ...)$bca[-c(2,3)],
-                       warning = function(w) w,
-                       error = function(e) e)
-  
-  if (!inherits(metricCI, "condition")) {
-    metricCI[1] <- round(metricCI[1]*100)
-    metricCI <- c(B$t0, metricCI)
+  if(!is.null(data$resample)) {
+    L <- merge(data$empInf, data$bestTune)
+    L <- L[ , grepl("^\\.obs", colnames(L)), drop = FALSE]
+    L <- colMeans(L, na.rm = TRUE)
     
-  } else metricCI <- c(B$t0, NA, NA, NA)
-  
-  names(metricCI) <- c(data$metric, "ConfLevel", "Lower", "Upper")
+    B <- list(t0 = mean(data$resample[[data$metric]]), 
+              t = data$resample[data$metric], 
+              R = nrow(data$resample), 
+              call = "")
+    
+    metricCI <- tryCatch(boot::boot.ci(B, type = "bca", L = L, ...)$bca[-c(2,3)],
+                         warning = function(w) w,
+                         error = function(e) e)
+    
+    if (!inherits(metricCI, "condition")) {
+      metricCI[1] <- round(metricCI[1]*100)
+      metricCI <- c(B$t0, metricCI)
+      
+    } else metricCI <- c(B$t0, NA, NA, NA)
+    
+    names(metricCI) <- c(data$metric, "ConfLevel", "Lower", "Upper")
+    
+  } else metricCI <- NULL
   
   ## out
   out <- list(table = as.table(overall),
