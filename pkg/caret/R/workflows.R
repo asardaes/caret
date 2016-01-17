@@ -249,10 +249,12 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     
     ## empirical influence of holdout samples for BCa-CI
     empInf <- as.data.frame(matrix(NA, nrow = NROW(allParam), ncol = nrow(x)))
-    statFun <- function(df, ids, ...) ctrl$summaryFunction(df[ids, , drop = FALSE])
-    empInf[, holdoutIndex] <- do.call(rbind, lapply(predicted, function(df) {
-      boot::empinf(data = df, statistic = statFun, stype = "i", index = metric)
-    }))
+    if(names(resampleIndex)[iter] != "AllData") {
+      statFun <- function(df, ids, ...) ctrl$summaryFunction(df[ids, , drop = FALSE])
+      empInf[, holdoutIndex] <- do.call(rbind, lapply(predicted, function(df) {
+        boot::empinf(data = df, statistic = statFun, stype = "i", index = metric)
+      }))
+    }
     colnames(empInf) <- paste0(".obs", 1:ncol(empInf))
     empInf <- cbind(allParam, empInf)
 
@@ -326,8 +328,10 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     
     ## empirical influence of holdout samples for BCa-CI
     empInf <- as.data.frame(matrix(NA, nrow = 1, ncol = nrow(x)))
-    statFun <- function(df, ids, ...) ctrl$summaryFunction(df[ids, , drop = FALSE])
-    empInf[1, holdoutIndex] <- boot::empinf(data = tmp, statistic = statFun, stype = "i", index = metric)
+    if(names(resampleIndex)[iter] != "AllData") {
+      statFun <- function(df, ids, ...) ctrl$summaryFunction(df[ids, , drop = FALSE])
+      empInf[1, holdoutIndex] <- boot::empinf(data = tmp, statistic = statFun, stype = "i", index = metric)
+    }
     colnames(empInf) <- paste0(".obs", 1:ncol(empInf))
     empInf <- cbind(info$loop[parm, , drop = FALSE], empInf)
     
