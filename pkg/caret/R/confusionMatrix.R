@@ -204,7 +204,7 @@ confusionMatrix.train <- function(data, norm = "overall", dnn = c("Prediction", 
   names(dimnames(overall)) <- dnn  
   
   ## confidence interval
-  if(!is.null(data$resample)) {
+  if(!is.null(data$resample) && !is.null(data$control$conf)) {
     L <- merge(data$empInf, data$bestTune)
     L <- L[ , grepl("^\\.obs", colnames(L)), drop = FALSE]
     L <- colMeans(L, na.rm = TRUE)
@@ -214,14 +214,16 @@ confusionMatrix.train <- function(data, norm = "overall", dnn = c("Prediction", 
               R = nrow(data$resample), 
               call = "")
     
-    metricCI <- tryCatch(boot::boot.ci(B, type = "bca", L = L, ...)$bca[-c(2,3)],
-                         warning = function(w) w,
-                         error = function(e) e)
-    
-    if (!inherits(metricCI, "condition")) {
-      metricCI[1] <- round(metricCI[1]*100)
-      metricCI <- c(B$t0, metricCI)
+    if(min(B$t[,1]) != max(B$t[,1])) {
+      metricCI <- tryCatch(boot::boot.ci(B, type = "bca", L = L, ...)$bca[-c(2,3)],
+                           warning = function(w) w,
+                           error = function(e) e)
       
+      if (!inherits(metricCI, "condition")) {
+        metricCI[1] <- round(metricCI[1]*100)
+        metricCI <- c(B$t0, metricCI)
+        
+      } else metricCI <- c(B$t0, NA, NA, NA)
     } else metricCI <- c(B$t0, NA, NA, NA)
     
     names(metricCI) <- c(data$metric, "ConfLevel", "Lower", "Upper")
@@ -262,9 +264,10 @@ print.confusionMatrix.train <- function(x, digits = 1, ...)
         out <- cbind(lhs, c(metricCI[1], paste0("(", metricCI[3], ", ", metricCI[4], ")")))
       } else out <- cbind(names(metricCI)[1], ":", metricCI[1])
 
-      dimnames(out) <- list(rep("", nrow(out)), rep("", ncol(out)))
-      print(out, quote = FALSE)
-    }
+    } else out <- cbind("Accuracy", ":", formatC(sum(diag(x$table) / sum(x$table))))
+    
+    dimnames(out) <- list(rep("", nrow(out)), rep("", ncol(out)))
+    print(out, quote = FALSE)
     cat("\n")
   }
   invisible(x)

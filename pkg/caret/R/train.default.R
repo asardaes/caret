@@ -12,8 +12,7 @@ train.default <- function(x, y,
                           maximize = ifelse(metric %in% c("RMSE", "logLoss"), FALSE, TRUE),
                           trControl = trainControl(),
                           tuneGrid = NULL,
-                          tuneLength = 3,
-                          conf = 0.95) {
+                          tuneLength = 3) {
   startTime <- proc.time()
   
   if(is.character(y)) y <- as.factor(y)
@@ -610,6 +609,33 @@ train.default <- function(x, y,
   if(trControl$savePredictions == "final") 
     tmp$predictions <- merge(bestTune, tmp$predictions)
   
+  ## confidence interval
+  if(!is.null(byResample) && !is.null(trControl$conf)) {
+    L <- merge(empInf, bestTune)
+    L <- L[ , grepl("^\\.obs", colnames(L)), drop = FALSE]
+    L <- colMeans(L, na.rm = TRUE)
+    
+    B <- list(t0 = mean(byResample[[metric]]), 
+              t = byResample[metric], 
+              R = nrow(byResample), 
+              call = "")
+    
+    if(min(B$t[,1]) != max(B$t[,1])) {
+      metricCI <- tryCatch(boot::boot.ci(B, type = "bca", L = L, conf = trControl$conf)$bca[-c(2,3)],
+                           warning = function(w) w,
+                           error = function(e) e)
+      
+      if (!inherits(metricCI, "condition")) {
+        metricCI[1] <- round(metricCI[1]*100)
+        metricCI <- c(B$t0, metricCI)
+        
+      } else metricCI <- c(B$t0, NA, NA, NA)
+    } else metricCI <- c(B$t0, NA, NA, NA)
+    
+    names(metricCI) <- c(metric, "ConfLevel", "Lower", "Upper")
+    
+  } else metricCI <- NULL
+  
   endTime <- proc.time()
   times <- list(everything = endTime - startTime,
                 final = finalTime)
@@ -633,7 +659,8 @@ train.default <- function(x, y,
                         maximize = maximize,
                         yLimits = trControl$yLimits,
                         times = times,
-                        empInf = empInf), 
+                        empInf = empInf,
+                        metricCI = metricCI), 
                    class = "train")
   trControl$yLimits <- NULL
   
@@ -643,34 +670,6 @@ train.default <- function(x, y,
     out$times$prediction <- system.time(predict(out, pData))
   } else  out$times$prediction <- rep(NA, 3)
   
-  ## confidence interval
-  if(!is.null(out$resample)) {
-    L <- merge(out$empInf, out$bestTune)
-    L <- L[ , grepl("^\\.obs", colnames(L)), drop = FALSE]
-    L <- colMeans(L, na.rm = TRUE)
-    
-    B <- list(t0 = mean(out$resample[[out$metric]]), 
-              t = out$resample[out$metric], 
-              R = nrow(out$resample), 
-              call = "")
-    
-    metricCI <- tryCatch(boot::boot.ci(B, type = "bca", L = L, conf = conf)$bca[-c(2,3)],
-                         warning = function(w) w,
-                         error = function(e) e)
-    
-    if (!inherits(metricCI, "condition")) {
-      metricCI[1] <- round(metricCI[1]*100)
-      metricCI <- c(B$t0, metricCI)
-      
-    } else metricCI <- c(B$t0, NA, NA, NA)
-    
-    names(metricCI) <- c(out$metric, "ConfLevel", "Lower", "Upper")
-    
-  } else metricCI <- NULL
-  
-  out$metricCI <- metricCI
-  
-  ## out
   out
 }
 
