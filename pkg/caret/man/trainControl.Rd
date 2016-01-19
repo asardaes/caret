@@ -45,7 +45,7 @@ trainControl(method = "boot",
   \item{search}{Either \code{"grid"} or \code{"random"}, describing how the tuning parameter grid is determined. See details below.}
   \item{initialWindow, horizon, fixedWindow}{possible arguments to \code{\link{createTimeSlices}}}
   \item{classProbs}{a logical; should class probabilities be computed for classification models (along with predicted values) in each resample?}
-  \item{summaryFunction}{a function to compute performance metrics across resamples. The arguments to the function should be the same as those in \code{\link{defaultSummary}}.}
+  \item{summaryFunction}{a function to compute performance metrics across resamples. The arguments to the function should be the same as those in \code{\link{defaultSummary}}, and the output should be named.}
   \item{selectionFunction}{the function used to select the optimal tuning parameter. This can be a name of the function or the function itself. See \code{\link{best}} for details and other options.}
   \item{preProcOptions}{A list of options to pass to \code{\link{preProcess}}. The type of pre-processing (e.g. center, scaling etc) is passed in via the \code{preProc} option in \code{\link{train}}.}
   \item{sampling}{a single character value describing the type of additional sampling that is conducted after resampling (usually to resolve class imbalances). Values are \code{"none"}, \code{"down"}, \code{"up"}, \code{"smote"}, or \code{"rose"}. The latter two values require the \pkg{DMwR} and \pkg{ROSE} packages, respectively. This argument can also be a list to facilitate custom sampling and these details can be found on the \pkg{caret} package website for sampling (link below).}
@@ -80,7 +80,7 @@ Using adaptive resampling when \code{method} is either \code{"adaptive_cv"}, \co
 
 The option \code{search = "grid"} uses the default grid search routine. When \code{search = "random"}, a random search procedure is used (Bergstra and Bengio, 2012). See \url{http://topepo.github.io/caret/random.html} for details and an example.
 
-The BCa confidence interval needs to create a matrix with one column for every observation in the data, and one row for every replication performed (bootstrap or cv methods), which can be significant in terms of both time and memory if the dataset is large.
+The BCa confidence interval needs to create a matrix with one column for every observation in the data, and one row for every row in \code{tuneGrid} (which can be as much as \code{tuneLength} ^ number of tunning parameters depending on what was provided to \code{\link{train}}). If parallel computation is used, that number has to be multiplied by the amount of parallel workers. This can be significant in terms of both time and memory if the dataset is large.
 
 If the resulting confidence interval is \code{NULL}, it means no cross-validation was done, or it is unsupported (e.g \code{oob}). If it has missing values (\code{NA}), it could be due to:
 
@@ -89,6 +89,8 @@ If the resulting confidence interval is \code{NULL}, it means no cross-validatio
   \item The confidence level (\code{conf}) is too high. Could be solved with the above, or by decreasing the confidence level.
   \item The chosen metric is not very smooth. Look at its histogram using the \code{resample} element of \code{\link{train}}'s output.
 }
+
+If a custom \code{summaryFunction} is provided, please make sure its output has at least one numeric element with the same name as the \code{metric} specified in \code{\link{train}}, otherwise it won't be detected correctly.
 }
 
 \author{Max Kuhn}

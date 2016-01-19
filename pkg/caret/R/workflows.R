@@ -59,6 +59,61 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     resampleIndex <- c(list("AllData" = rep(0, nrow(x))), resampleIndex)
     ctrl$indexOut <- c(list("AllData" = rep(0, nrow(x))),  ctrl$indexOut)
   }
+  
+  ## For BCa-CI, create closure for each parallel worker to save space
+  empInfFun <- function(parm) {
+    empInf <- as.data.frame(matrix(NA_real_, nrow = NROW(parm), ncol = nrow(x)))
+    colnames(empInf) <- paste0(".obs", 1:ncol(empInf))
+    empInf <- data.frame(parm, empInf)
+    
+    num <- empInf
+    
+    update_fun <- function(newEmpInf, holdoutIndex, parm) {
+      if(!missing(newEmpInf) && !missing(holdoutIndex) && length(holdoutIndex) > 0L) {
+        id_parm <- ncol(parm)
+        
+        tempEmpInf <- tempNum <- as.data.frame(matrix(NA_real_, nrow = nrow(parm), ncol = ncol(empInf) - id_parm))
+        
+        tempNum[ , holdoutIndex] <- 1
+        tempNum <- cbind(parm, tempNum)
+        colnames(tempNum) <- colnames(num)
+        tempNum <- rbind(num, tempNum)
+        num <<- stats::aggregate(tempNum[ , -id_parm, drop = FALSE],
+                                 by = as.list(tempNum[ , id_parm, drop = FALSE]),
+                                 FUN = sum, na.rm = TRUE)
+        
+        tempEmpInf[ , holdoutIndex] <- newEmpInf
+        newEmpInf <- cbind(parm, tempEmpInf)
+        colnames(newEmpInf) <- colnames(empInf)
+        newEmpInf <- rbind(empInf, newEmpInf)
+        empInf <<- stats::aggregate(newEmpInf[ , -id_parm, drop = FALSE],
+                                    by = as.list(newEmpInf[ , id_parm, drop = FALSE]),
+                                    FUN = function(x) { if(all(is.na(x))) NA else sum(x, na.rm = TRUE) })
+      }
+      
+      list(empInf = empInf, num = num)
+    }
+    
+    update_fun
+  }
+  
+  if(!is.null(ctrl$conf)) {
+    empInfUpdate <- empInfFun(info$loop)
+    
+    if(ctrl$allowParallel && getDoParWorkers() > 1L) {
+      ## one object for each worker
+      foreach(i = seq_len(getDoParWorkers()),
+              .packages = "stats") %dopar% {
+                assign("empInfUpdate", empInfUpdate, .GlobalEnv)
+                NULL
+              }
+      
+      ## remove the object from this environment so that it doesn't get exported
+      rm(empInfUpdate)
+      
+    }
+  }
+  
   `%op%` <- getOper(ctrl$allowParallel && getDoParWorkers() > 1)
   keep_pred <- isTRUE(ctrl$savePredictions) || ctrl$savePredictions %in% c("all", "final")
   pkgs <- c("methods", "caret")
@@ -248,19 +303,15 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     if(testing) print(head(predicted))
     
     ## empirical influence of holdout samples for BCa-CI
-    if(!is.null(ctrl$conf)) {
-      empInf <- as.data.frame(matrix(NA, nrow = NROW(allParam), ncol = nrow(x)))
-      if(names(resampleIndex)[iter] != "AllData") {
-        statFun <- function(df, ids, ...) ctrl$summaryFunction(df[ids, , drop = FALSE])
-        empInf[, holdoutIndex] <- do.call(rbind, lapply(predicted, function(df) {
-          boot::empinf(data = df, statistic = statFun, stype = "i", index = metric)
-        }))
-      }
-      colnames(empInf) <- paste0(".obs", 1:ncol(empInf))
-      empInf <- cbind(allParam, empInf)
+    if(!is.null(ctrl$conf) && names(resampleIndex)[iter] != "AllData") {
+      statFun <- function(df, ids, ...) ctrl$summaryFunction(df[ids, , drop = FALSE])
+      empInf <- rbind.fill(lapply(predicted, function(df) {
+        boot::empinf(data = df, statistic = statFun, stype = "i", index = metric)
+      }))
       
-    } else empInf <- NULL
-
+      empInfUpdate(empInf, holdoutIndex, allParm)
+    }
+    
     ## same for the class probabilities
     if(ctrl$classProbs)
     {
@@ -330,23 +381,19 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     thisResample <- cbind(thisResample, info$loop[parm,,drop = FALSE])
     
     ## empirical influence of holdout samples for BCa-CI
-    if(!is.null(ctrl$conf)) {
-      empInf <- as.data.frame(matrix(NA, nrow = 1, ncol = nrow(x)))
-      if(names(resampleIndex)[iter] != "AllData") {
-        statFun <- function(df, ids, ...) ctrl$summaryFunction(df[ids, , drop = FALSE])
-        empInf[1, holdoutIndex] <- boot::empinf(data = tmp, statistic = statFun, stype = "i", index = metric)
-      }
-      colnames(empInf) <- paste0(".obs", 1:ncol(empInf))
-      empInf <- cbind(info$loop[parm, , drop = FALSE], empInf)
-      
-    } else empInf <- NULL
+    if(!is.null(ctrl$conf) && names(resampleIndex)[iter] != "AllData") {
+      statFun <- function(df, ids, ...) ctrl$summaryFunction(df[ids, , drop = FALSE])
+      empInf <- boot::empinf(data = tmp, statistic = statFun, stype = "i", index = metric)
+      empInfUpdate(empInf, holdoutIndex, info$loop[parm, , drop = FALSE])
+    }
     
   }
+  
   thisResample$Resample <- names(resampleIndex)[iter]
   
   if(ctrl$verboseIter) progress(printed[parm,,drop = FALSE],
                                 names(resampleIndex), iter, FALSE)
-  list(resamples = thisResample, pred = tmpPred, empInf = empInf)
+  list(resamples = thisResample, pred = tmpPred)
 }
   
   resamples <- rbind.fill(result[names(result) == "resamples"])
@@ -390,7 +437,36 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     }
   }
   
-  empInf <- rbind.fill(result[names(result) == "empInf"])
+  ## obtain final empirical influence values for each replication
+  if(!is.null(ctrl$conf)) {
+    if(ctrl$allowParallel && getDoParWorkers() > 1L) {
+      empInf <- foreach(i = seq_len(getDoParWorkers()), .combine = c) %op% empInfUpdate()
+      empInfNum <- rbind.fill(empInf[names(empInf) == "num"])
+      empInf <- rbind.fill(empInf[names(empInf) == "empInf"])
+      
+    } else {
+      empInf <- empInfUpdate()
+      empInfNum <- empInf$num
+      empInf <- empInf$empInf
+    } 
+    
+    empInfId <- grep("^\\.", colnames(empInf))
+    
+    empInf <- stats::aggregate(empInf[ , empInfId, drop = FALSE],
+                               by = as.list(empInf[ , -empInfId, drop = FALSE]),
+                               FUN = function(x) { if(all(is.na(x))) NA else sum(x, na.rm = TRUE) })
+    
+    empInfNum <- stats::aggregate(empInfNum[ , empInfId, drop = FALSE],
+                                  by = as.list(empInfNum[ , -empInfId, drop = FALSE]),
+                                  FUN = sum)
+    
+    empInf <- lapply(1:nrow(empInf), function(id_row) {
+      empInf[id_row, empInfId] / empInfNum[id_row, empInfId]
+    })
+    
+    empInf <- cbind(info$loop, rbind.fill(empInf))
+    
+  } else empInf = NULL
   
   list(performance = out, resamples = resamples, predictions = if(keep_pred) pred else NULL,
        empInf = empInf)

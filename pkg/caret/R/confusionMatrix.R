@@ -206,8 +206,7 @@ confusionMatrix.train <- function(data, norm = "overall", dnn = c("Prediction", 
   ## confidence interval
   if(!is.null(data$resample) && !is.null(data$control$conf)) {
     L <- merge(data$empInf, data$bestTune)
-    L <- L[ , grepl("^\\.obs", colnames(L)), drop = FALSE]
-    L <- colMeans(L, na.rm = TRUE)
+    L <- as.numeric(L[ , grepl("^\\.obs", colnames(L))])
     
     B <- list(t0 = mean(data$resample[[data$metric]]), 
               t = data$resample[data$metric], 

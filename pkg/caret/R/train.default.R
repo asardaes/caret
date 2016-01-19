@@ -612,8 +612,7 @@ train.default <- function(x, y,
   ## confidence interval
   if(!is.null(byResample) && !is.null(trControl$conf)) {
     L <- merge(empInf, bestTune)
-    L <- L[ , grepl("^\\.obs", colnames(L)), drop = FALSE]
-    L <- colMeans(L, na.rm = TRUE)
+    L <- as.numeric(L[ , grepl("^\\.obs", colnames(L))])
     
     B <- list(t0 = mean(byResample[[metric]]), 
               t = byResample[metric], 
