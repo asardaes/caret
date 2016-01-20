@@ -52,18 +52,18 @@ empInfFun <- function(parm, num_obs)
   
   empInfUpdate <- function(newEmpInf, holdoutIndex, parm) {
     if(!missing(newEmpInf) && !missing(holdoutIndex) && length(holdoutIndex) > 0L) {
-      id_parm <- ncol(parm)
+      id_parm <- 1L:ncol(parm)
       
       tempEmpInf <- tempNum <- data.frame(parm, matrix(newEmpInf, nrow = nrow(parm), byrow = !is.matrix(newEmpInf),
                                                        dimnames = list(NULL, paste0(".obs", holdoutIndex))))
       tempNum[ , -id_parm] <- 1
       
-      newEmpInf <- rbind.fill(empInf, tempEmpInf)
-      tempNum <- rbind.fill(num, tempNum)
+      newEmpInf <- plyr::rbind.fill(empInf, tempEmpInf)
+      tempNum <- plyr::rbind.fill(num, tempNum)
       
       num <<- stats::aggregate(tempNum[ , -id_parm, drop = FALSE],
                                by = as.list(tempNum[ , id_parm, drop = FALSE]),
-                               FUN = sum, na.rm = TRUE)
+                               FUN = function(x) { if(all(is.na(x))) NA else sum(x, na.rm = TRUE) })
       
       empInf <<- stats::aggregate(newEmpInf[ , -id_parm, drop = FALSE],
                                   by = as.list(newEmpInf[ , id_parm, drop = FALSE]),
@@ -101,7 +101,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     if(ctrl$allowParallel && getDoParWorkers() > 1L) {
       ## one object for each worker
       foreach(i = seq_len(getDoParWorkers()),
-              .packages = "stats") %dopar% {
+              .packages = c("stats", "plyr")) %dopar% {
                 assign("empInfUpdate", empInfUpdate, .GlobalEnv)
                 NULL
               }
@@ -302,11 +302,11 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     ## empirical influence of holdout samples for BCa-CI
     if(!is.null(ctrl$conf) && names(resampleIndex)[iter] != "AllData") {
       statFun <- function(df, ids, ...) ctrl$summaryFunction(df[ids, , drop = FALSE])
-      empInf <- rbind.fill(lapply(predicted, function(df) {
+      empInf <- do.call(rbind, lapply(predicted, function(df) {
         boot::empinf(data = df, statistic = statFun, stype = "i", index = metric)
       }))
       
-      empInfUpdate(empInf, holdoutIndex, allParm)
+      empInfUpdate(empInf, holdoutIndex, allParam)
     }
     
     ## same for the class probabilities
@@ -452,7 +452,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
       empInf <- empInf$empInf
     } 
     
-    empInfId <- grep("^\\.", colnames(empInf))
+    empInfId <- grep("^\\.obs", colnames(empInf))
     
     empInf <- stats::aggregate(empInf[ , empInfId, drop = FALSE],
                                by = as.list(empInf[ , -empInfId, drop = FALSE]),
@@ -460,13 +460,13 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     
     empInfNum <- stats::aggregate(empInfNum[ , empInfId, drop = FALSE],
                                   by = as.list(empInfNum[ , -empInfId, drop = FALSE]),
-                                  FUN = sum)
+                                  FUN = function(x) { if(all(is.na(x))) NA else sum(x, na.rm = TRUE) })
     
     empInf <- lapply(1:nrow(empInf), function(idRow) {
       empInf[idRow, empInfId] / empInfNum[idRow, empInfId]
     })
     
-    empInf <- cbind(info$loop, rbind.fill(empInf))
+    empInf <- cbind(empInfNum[ , -empInfId, drop = FALSE], do.call(rbind, empInf))
     
   } else empInf = NULL
   
