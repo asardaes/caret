@@ -41,6 +41,41 @@ expandParameters <- function(fixed, seq)
   out
 }
 
+## For BCa-CI, create closure, possibly for each parallel worker, to save space
+empInfFun <- function(parm, num_obs)
+{
+  empInf <- as.data.frame(matrix(NA_real_, nrow = NROW(parm), ncol = num_obs))
+  colnames(empInf) <- paste0(".obs", 1:ncol(empInf))
+  empInf <- data.frame(parm, empInf)
+  
+  num <- empInf
+  
+  empInfUpdate <- function(newEmpInf, holdoutIndex, parm) {
+    if(!missing(newEmpInf) && !missing(holdoutIndex) && length(holdoutIndex) > 0L) {
+      id_parm <- ncol(parm)
+      
+      tempEmpInf <- tempNum <- data.frame(parm, matrix(newEmpInf, nrow = nrow(parm), byrow = !is.matrix(newEmpInf),
+                                                       dimnames = list(NULL, paste0(".obs", holdoutIndex))))
+      tempNum[ , -id_parm] <- 1
+      
+      newEmpInf <- rbind.fill(empInf, tempEmpInf)
+      tempNum <- rbind.fill(num, tempNum)
+      
+      num <<- stats::aggregate(tempNum[ , -id_parm, drop = FALSE],
+                               by = as.list(tempNum[ , id_parm, drop = FALSE]),
+                               FUN = sum, na.rm = TRUE)
+      
+      empInf <<- stats::aggregate(newEmpInf[ , -id_parm, drop = FALSE],
+                                  by = as.list(newEmpInf[ , id_parm, drop = FALSE]),
+                                  FUN = function(x) { if(all(is.na(x))) NA else sum(x, na.rm = TRUE) })
+    }
+    
+    list(empInf = empInf, num = num)
+  }
+  
+  empInfUpdate
+}
+
 nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, metric, testing = FALSE, ...)
 {
   loadNamespace("caret")
@@ -60,45 +95,8 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     ctrl$indexOut <- c(list("AllData" = rep(0, nrow(x))),  ctrl$indexOut)
   }
   
-  ## For BCa-CI, create closure for each parallel worker to save space
-  empInfFun <- function(parm) {
-    empInf <- as.data.frame(matrix(NA_real_, nrow = NROW(parm), ncol = nrow(x)))
-    colnames(empInf) <- paste0(".obs", 1:ncol(empInf))
-    empInf <- data.frame(parm, empInf)
-    
-    num <- empInf
-    
-    update_fun <- function(newEmpInf, holdoutIndex, parm) {
-      if(!missing(newEmpInf) && !missing(holdoutIndex) && length(holdoutIndex) > 0L) {
-        id_parm <- ncol(parm)
-        
-        tempEmpInf <- tempNum <- as.data.frame(matrix(NA_real_, nrow = nrow(parm), ncol = ncol(empInf) - id_parm))
-        
-        tempNum[ , holdoutIndex] <- 1
-        tempNum <- cbind(parm, tempNum)
-        colnames(tempNum) <- colnames(num)
-        tempNum <- rbind(num, tempNum)
-        num <<- stats::aggregate(tempNum[ , -id_parm, drop = FALSE],
-                                 by = as.list(tempNum[ , id_parm, drop = FALSE]),
-                                 FUN = sum, na.rm = TRUE)
-        
-        tempEmpInf[ , holdoutIndex] <- newEmpInf
-        newEmpInf <- cbind(parm, tempEmpInf)
-        colnames(newEmpInf) <- colnames(empInf)
-        newEmpInf <- rbind(empInf, newEmpInf)
-        empInf <<- stats::aggregate(newEmpInf[ , -id_parm, drop = FALSE],
-                                    by = as.list(newEmpInf[ , id_parm, drop = FALSE]),
-                                    FUN = function(x) { if(all(is.na(x))) NA else sum(x, na.rm = TRUE) })
-      }
-      
-      list(empInf = empInf, num = num)
-    }
-    
-    update_fun
-  }
-  
   if(!is.null(ctrl$conf)) {
-    empInfUpdate <- empInfFun(info$loop)
+    empInfUpdate <- empInfFun(info$loop, nrow(x))
     
     if(ctrl$allowParallel && getDoParWorkers() > 1L) {
       ## one object for each worker
@@ -110,7 +108,6 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
       
       ## remove the object from this environment so that it doesn't get exported
       rm(empInfUpdate)
-      
     }
   }
   
@@ -465,8 +462,8 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
                                   by = as.list(empInfNum[ , -empInfId, drop = FALSE]),
                                   FUN = sum)
     
-    empInf <- lapply(1:nrow(empInf), function(id_row) {
-      empInf[id_row, empInfId] / empInfNum[id_row, empInfId]
+    empInf <- lapply(1:nrow(empInf), function(idRow) {
+      empInf[idRow, empInfId] / empInfNum[idRow, empInfId]
     })
     
     empInf <- cbind(info$loop, rbind.fill(empInf))
