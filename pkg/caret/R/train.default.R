@@ -513,7 +513,7 @@ train.default <- function(x, y,
     performance <- as.data.frame(t(performance))
     performance <- cbind(performance, tuneGrid)
     performance <- performance[-1,,drop = FALSE]
-    tmp <- resampledCM <- NULL
+    empInf <- tmp <- resampledCM <- NULL
   }
   ## Save some or all of the resampling summary metrics
   if(!(trControl$method %in% c("LOOCV", "oob", "none"))) {
