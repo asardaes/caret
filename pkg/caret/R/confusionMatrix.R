@@ -208,9 +208,12 @@ confusionMatrix.train <- function(data, norm = "overall", dnn = c("Prediction", 
     L <- merge(data$empInf, data$bestTune)
     L <- as.numeric(L[ , grepl("^\\.obs", colnames(L))])
     
-    B <- list(t0 = mean(data$resample[[data$metric]]), 
-              t = data$resample[data$metric], 
-              R = nrow(data$resample), 
+    ## in case of trControl$returnResamp = "all"
+    t <- merge(data$resample, data$bestTune)
+    
+    B <- list(t0 = mean(t[[data$metric]]), 
+              t = t[data$metric], 
+              R = nrow(t), 
               call = "")
     
     if(min(B$t[,1]) != max(B$t[,1])) {

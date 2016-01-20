@@ -614,9 +614,12 @@ train.default <- function(x, y,
     L <- merge(empInf, bestTune)
     L <- as.numeric(L[ , grepl("^\\.obs", colnames(L))])
     
-    B <- list(t0 = mean(byResample[[metric]]), 
-              t = byResample[metric], 
-              R = nrow(byResample), 
+    ## in case of trControl$returnResamp = "all"
+    t <- merge(byResample, bestTune)
+    
+    B <- list(t0 = mean(t[[metric]]), 
+              t = t[metric], 
+              R = nrow(t), 
               call = "")
     
     if(min(B$t[,1]) != max(B$t[,1])) {

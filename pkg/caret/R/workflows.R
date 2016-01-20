@@ -440,7 +440,12 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
   ## obtain final empirical influence values for each replication
   if(!is.null(ctrl$conf)) {
     if(ctrl$allowParallel && getDoParWorkers() > 1L) {
-      empInf <- foreach(i = seq_len(getDoParWorkers()), .combine = c) %op% empInfUpdate()
+      empInf <- foreach(i = seq_len(getDoParWorkers()), .combine = c) %dopar% {
+        ret <- empInfUpdate()
+        rm("empInfUpdate", pos = .GlobalEnv)
+        ret
+      }
+      
       empInfNum <- rbind.fill(empInf[names(empInf) == "num"])
       empInf <- rbind.fill(empInf[names(empInf) == "empInf"])
       
