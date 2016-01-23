@@ -161,10 +161,9 @@ stringFunc <- function (x)  {
       
       if(!is.null(constString)){
         cat(truncateText(paste(constString, collapse = "\n")))
-        cat("\n")
       }
       
-      
+      cat("\n")
       if(dim(tuneAcc)[1] > 1) {
         if(is.null(x$update)) {
           met <- paste(x$metric, "was used to select the optimal model using")

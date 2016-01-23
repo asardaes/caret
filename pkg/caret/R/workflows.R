@@ -112,18 +112,18 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
   }
   
   if(!is.null(ctrl$conf)) {
-    empInfUpdate <- empInfFun(tuneGrid, nrow(x))
+    .empInfUpdate <- empInfFun(tuneGrid, nrow(x))
     
     if(ctrl$allowParallel && getDoParWorkers() > 1L) {
       ## one object for each worker
       foreach(i = seq_len(getDoParWorkers()),
               .packages = c("stats")) %dopar% {
-                assign("empInfUpdate", empInfUpdate, .GlobalEnv)
+                .empInfUpdate <<- .empInfUpdate # a bit hacky
                 NULL
               }
       
       ## remove the object from this environment so that it doesn't get exported
-      rm(empInfUpdate)
+      rm(.empInfUpdate)
     }
   }
   
@@ -322,7 +322,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
         empinf(data = df, statistic = statFun, index = metric)
       }))
       
-      empInfUpdate(empInf, holdoutIndex, allParam)
+      .empInfUpdate(empInf, holdoutIndex, allParam)
     }
     
     ## same for the class probabilities
@@ -397,7 +397,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     if(!is.null(ctrl$conf) && names(resampleIndex)[iter] != "AllData") {
       statFun <- function(df, ids, ...) ctrl$summaryFunction(df[ids, , drop = FALSE])
       empInf <- empinf(data = tmp, statistic = statFun, index = metric)
-      empInfUpdate(empInf, holdoutIndex, info$loop[parm, , drop = FALSE])
+      .empInfUpdate(empInf, holdoutIndex, info$loop[parm, , drop = FALSE])
     }
     
   }
@@ -454,8 +454,8 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
   if(!is.null(ctrl$conf)) {
     if(ctrl$allowParallel && getDoParWorkers() > 1L) {
       empInf <- foreach(i = seq_len(getDoParWorkers()), .combine = c) %dopar% {
-        ret <- empInfUpdate()
-        rm("empInfUpdate", pos = .GlobalEnv)
+        ret <- .empInfUpdate()
+        rm(".empInfUpdate", pos = globalenv()) # clean parallel worker
         ret
       }
       
@@ -463,10 +463,10 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
       empInf <- rbind.fill(empInf[names(empInf) == "empInf"])
       
     } else {
-      empInf <- empInfUpdate()
+      empInf <- .empInfUpdate()
       empInfNum <- empInf$num
       empInf <- empInf$empInf
-    } 
+    }
     
     empInfId <- grep("^\\.obs", colnames(empInf))
     
@@ -479,10 +479,12 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
                                   FUN = function(x) { if(all(is.na(x))) NA else sum(x, na.rm = TRUE) })
     
     empInf <- lapply(1:nrow(empInf), function(idRow) {
-      empInf[idRow, empInfId] / empInfNum[idRow, empInfId]
+      ret <- empInf[idRow, , drop = FALSE]
+      ret[1L, empInfId] <- empInf[idRow, empInfId] / empInfNum[idRow, empInfId]
+      ret
     })
     
-    empInf <- cbind(empInfNum[ , -empInfId, drop = FALSE], do.call(rbind, empInf))
+    empInf <- merge(tuneGrid, do.call(rbind, empInf))
     
   } else empInf = NULL
   
