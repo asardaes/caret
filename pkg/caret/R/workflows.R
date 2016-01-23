@@ -41,33 +41,49 @@ expandParameters <- function(fixed, seq)
   out
 }
 
-## For BCa-CI, create closure, possibly for each parallel worker, to save space
-empInfFun <- function(parm, num_obs)
-{
-  empInf <- as.data.frame(matrix(NA_real_, nrow = NROW(parm), ncol = num_obs))
-  colnames(empInf) <- paste0(".obs", 1:ncol(empInf))
-  empInf <- data.frame(parm, empInf)
+## My own version of boot's 'usual.jack' that doesn't use a 'for' loop and always uses stype "i"
+empinf <- function(data, statistic, index, ...) {
+  n <- NROW(data)
+  i0 <- seq_len(n)
+  tobs <- statistic(data, i0, ...)
+  if(is.null(names(tobs)) && is.character(index)) index <- 1L
+  tobs <- tobs[index]
   
+  l <- sapply(seq_len(n), function(i) {
+    (n - 1L) * (tobs - statistic(data, i0[-i], ...)[index])
+  })
+  
+  l
+}
+
+## For BCa-CI, create closure, possibly for each parallel worker, to save space
+empInfFun <- function(Parm, num_obs)
+{
+  ## pre-allocation of matrices
+  empInf <- as.data.frame(matrix(0, nrow = NROW(Parm), ncol = num_obs))
+  colnames(empInf) <- paste0(".obs", 1:ncol(empInf))
+  empInf <- data.frame(Parm, empInf)
   num <- empInf
+  
+  id_parm <- 1L:ncol(Parm)
   
   empInfUpdate <- function(newEmpInf, holdoutIndex, parm) {
     if(!missing(newEmpInf) && !missing(holdoutIndex) && length(holdoutIndex) > 0L) {
-      id_parm <- 1L:ncol(parm)
+      id_row <- lapply(id_parm, function(j) Parm[ , j] %in% parm[ , j])
+      id_row <- Reduce("&", id_row)
       
-      tempEmpInf <- tempNum <- data.frame(parm, matrix(newEmpInf, nrow = nrow(parm), byrow = !is.matrix(newEmpInf),
-                                                       dimnames = list(NULL, paste0(".obs", holdoutIndex))))
-      tempNum[ , -id_parm] <- 1
+      if(nrow(parm) > 1L && sum(id_row) > 1L) newEmpInf <- stats::aggregate(newEmpInf, by = as.list(parm), sum)[ , -id_parm, drop = FALSE]
       
-      newEmpInf <- plyr::rbind.fill(empInf, tempEmpInf)
-      tempNum <- plyr::rbind.fill(num, tempNum)
+      empInf[id_row, holdoutIndex + ncol(parm)] <<- empInf[id_row, holdoutIndex + ncol(parm), drop = FALSE] + 
+        newEmpInf
       
-      num <<- stats::aggregate(tempNum[ , -id_parm, drop = FALSE],
-                               by = as.list(tempNum[ , id_parm, drop = FALSE]),
-                               FUN = function(x) { if(all(is.na(x))) NA else sum(x, na.rm = TRUE) })
+      if(nrow(parm) > 1L && sum(id_row) > 1L)
+        newNum <- stats::aggregate(matrix(1L, nrow(parm), 1L), by = as.list(parm), sum)$V1
+      else
+        newNum <- nrow(parm)
       
-      empInf <<- stats::aggregate(newEmpInf[ , -id_parm, drop = FALSE],
-                                  by = as.list(newEmpInf[ , id_parm, drop = FALSE]),
-                                  FUN = function(x) { if(all(is.na(x))) NA else sum(x, na.rm = TRUE) })
+      num[id_row, holdoutIndex + ncol(parm)] <<- num[id_row, holdoutIndex + ncol(parm)] + 
+        newNum
     }
     
     list(empInf = empInf, num = num)
@@ -76,7 +92,7 @@ empInfFun <- function(parm, num_obs)
   empInfUpdate
 }
 
-nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, metric, testing = FALSE, ...)
+nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, metric, tuneGrid, testing = FALSE, ...)
 {
   loadNamespace("caret")
   ppp <- list(options = ppOpts)
@@ -96,12 +112,12 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
   }
   
   if(!is.null(ctrl$conf)) {
-    empInfUpdate <- empInfFun(info$loop, nrow(x))
+    empInfUpdate <- empInfFun(tuneGrid, nrow(x))
     
     if(ctrl$allowParallel && getDoParWorkers() > 1L) {
       ## one object for each worker
       foreach(i = seq_len(getDoParWorkers()),
-              .packages = c("stats", "plyr")) %dopar% {
+              .packages = c("stats")) %dopar% {
                 assign("empInfUpdate", empInfUpdate, .GlobalEnv)
                 NULL
               }
@@ -303,7 +319,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     if(!is.null(ctrl$conf) && names(resampleIndex)[iter] != "AllData") {
       statFun <- function(df, ids, ...) ctrl$summaryFunction(df[ids, , drop = FALSE])
       empInf <- do.call(rbind, lapply(predicted, function(df) {
-        boot::empinf(data = df, statistic = statFun, stype = "i", index = metric)
+        empinf(data = df, statistic = statFun, index = metric)
       }))
       
       empInfUpdate(empInf, holdoutIndex, allParam)
@@ -380,7 +396,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     ## empirical influence of holdout samples for BCa-CI
     if(!is.null(ctrl$conf) && names(resampleIndex)[iter] != "AllData") {
       statFun <- function(df, ids, ...) ctrl$summaryFunction(df[ids, , drop = FALSE])
-      empInf <- boot::empinf(data = tmp, statistic = statFun, stype = "i", index = metric)
+      empInf <- empinf(data = tmp, statistic = statFun, index = metric)
       empInfUpdate(empInf, holdoutIndex, info$loop[parm, , drop = FALSE])
     }
     

@@ -408,7 +408,7 @@ train.default <- function(x, y,
           tmp <- nominalTrainWorkflow(x = x, y = y, wts = weights, 
                                       info = trainInfo, method = models,
                                       ppOpts = preProcess, ctrl = trControl, lev = classLevels, 
-                                      metric = metric, ...)
+                                      metric = metric, tuneGrid = tuneGrid, ...)
           performance <- tmp$performance
           resampleResults <- tmp$resample
         } else {

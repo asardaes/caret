@@ -126,7 +126,7 @@ stringFunc <- function (x)  {
           for(i in seq(along = numVals)) {
             if(numVals[i] == 1)
               constString <- c(constString,
-                               paste0("Tuning parameter '",
+                               paste0("\nTuning parameter '",
                                       names(numVals)[i],
                                       "' was held constant at a value of ",
                                       stringFunc(tuneAcc[1,names(numVals)[i]])))
@@ -158,7 +158,6 @@ stringFunc <- function (x)  {
       if(!selectCol) printMat <- printMat[, colnames(printMat) != "Selected", drop = FALSE]
       
       print(printMat, quote = FALSE, print.gap = 2)
-      cat("\n")
       
       if(!is.null(constString)){
         cat(truncateText(paste(constString, collapse = "\n")))
@@ -170,17 +169,17 @@ stringFunc <- function (x)  {
         if(is.null(x$update)) {
           met <- paste(x$metric, "was used to select the optimal model using")
           if(is.function(x$control$selectionFunction)) {
-            met <- paste(met, " a custom selection rule.\n")
+            met <- paste(met, "a custom selection rule.\n")
           } else {
             
             met <- paste(met,
                          switch(x$control$selectionFunction,
                                 best = paste(
-                                  " the",
+                                  "the",
                                   ifelse(x$maximize, "largest", "smallest"),
                                   "value.\n"),
-                                oneSE = " the one SE rule.\n",
-                                tolerance = " a tolerance rule.\n"))
+                                oneSE = "the one SE rule.\n",
+                                tolerance = "a tolerance rule.\n"))
           }
         } else {
           met <- paste("The tuning", ifelse(ncol(x$bestTune) > 1, "parameters", "parameter"),
@@ -190,7 +189,8 @@ stringFunc <- function (x)  {
         cat(truncateText(met))
       }
       
-      cat(truncateText(optString), "\n")
+      cat(truncateText(optString))
+      if(nchar(optString) > 0L) cat("\n")
     } else printMat <- NULL
     
     if(!is.null(x$metricCI) && !is.na(x$metricCI[2])) {
