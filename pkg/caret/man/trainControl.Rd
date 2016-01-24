@@ -29,9 +29,9 @@ trainControl(method = "boot",
              	               method = "gls", complete = TRUE),
              trim = FALSE,
              allowParallel = TRUE,
-             confType = "L",
+             confType = "bca",
              confLevel = NULL,
-             confGamma = 0)
+             confGamma = 0.5)
 }
 \arguments{
   \item{method}{The resampling method: \code{"boot"}, \code{"boot632"}, \code{"cv"}, \code{"repeatedcv"},
@@ -59,9 +59,9 @@ trainControl(method = "boot",
   \item{adaptive}{a list used when \code{method} is \code{"adaptive_cv"}, \code{"adaptive_boot"} or \code{"adaptive_LGOCV"}. See Details below. }
   \item{trim}{a logical. If \code{TRUE} the final model in \code{object\$finalModel} may have some components of the object removed so reduce the size of the saved object. The \code{predict} method will still work, but some other features of the model may not work. \code{trim}ing will occur only for models where this feature has been implemented. }
   \item{allowParallel}{if a parallel backend is loaded and available, should the function use it?}
-  \item{confType}{Type of confidence interval to compute. Supported strings are...}
-  \item{confLevel}{Confidence level for the BCa confidence interval using \code{\link[boot]{boot.ci}}. It will be calculated for the user's chosen \code{metric}. This requires more time and memory, so set \code{confLevel} to \code{NULL} to prevent the computations from being performed. The resulting interval could be \code{NULL} or \code{NA}, see Details.}
-  \item{confGamma}{Normalization factor for confidence interval.}
+  \item{confType}{Type of confidence interval to compute. See Details.}
+  \item{confLevel}{Confidence level for the confidence interval. See Details.}
+  \item{confGamma}{Normalization exponent for "L" confidence interval.}
 }
 
 \value{
@@ -84,17 +84,7 @@ Using adaptive resampling when \code{method} is either \code{"adaptive_cv"}, \co
 
 The option \code{search = "grid"} uses the default grid search routine. When \code{search = "random"}, a random search procedure is used (Bergstra and Bengio, 2012). See \url{http://topepo.github.io/caret/random.html} for details and an example.
 
-The BCa confidence interval needs to create a matrix with one column for every observation in the data, and one row for every row in \code{tuneGrid} (which can be as much as \code{tuneLength} ^ number of tunning parameters depending on what was provided to \code{\link{train}}). If parallel computation is used, that number has to be multiplied by the amount of parallel workers. This can be significant in terms of both time and memory if the dataset is large and/or many replications are made. If \code{confLevel} is \code{NULL}, then the related computations are not performed.
-
-If the resulting confidence interval is \code{NULL}, it means no cross-validation was done, or it is unsupported (e.g \code{oob}). If it has missing values (\code{NA}), it could be due to:
-
-\itemize{
-  \item Not enough replications were performed. Try increasing \code{number} or \code{repeats} appropriately.
-  \item The confidence level (\code{confLevel}) is too high. Could be solved with the above, or by decreasing the confidence level.
-  \item The chosen metric is not very smooth. Look at its histogram using the \code{resample} element of \code{\link{train}}'s output.
-}
-
-If a custom \code{summaryFunction} is provided, please make sure its output has at least one numeric element with the same name as the \code{metric} specified in \code{\link{train}}, otherwise it won't be detected correctly.
+The confidence interval is calculated using \code{\link{confidenceInterval}}. It will be calculated for the user's chosen \code{metric}. This might require more time and memory, so set \code{confLevel} to \code{NULL} to prevent the computations from being performed. The resulting interval could be \code{NULL} or infinite. For more information, see the documentation for \code{\link{confidenceInterval}}.
 }
 
 \author{Max Kuhn}

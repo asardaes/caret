@@ -23,9 +23,9 @@ trainControl <- function(method = "boot",
                          adaptive = list(min = 5, alpha = 0.05, method = "gls", complete = TRUE),
                          trim = FALSE,
                          allowParallel = TRUE,
-                         confType = "L",
+                         confType = "bca",
                          confLevel = NULL,
-                         confGamma = 0)
+                         confGamma = 0.5)
 {
   if(is.null(selectionFunction)) stop("null selectionFunction values not allowed")
   if(!(returnResamp %in% c("all", "final", "none"))) stop("incorrect value of returnResamp")

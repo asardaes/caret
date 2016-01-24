@@ -621,10 +621,10 @@ train.default <- function(x, y,
     t <- merge(byResample, bestTune)[[metric]]
     
     metricCI <- confidenceInterval(t,
-                                   conf.level = trControl$confLevel,
-                                   conf.type = trControl$confType,
-                                   conf.gamma = trControl$confGamma,
-                                   subsample.sizes = lengths(trControl$indexOut),
+                                   confLevel = trControl$confLevel,
+                                   confType = trControl$confType,
+                                   confGamma = trControl$confGamma,
+                                   subsampleSizes = lengths(trControl$indexOut),
                                    metric = metric,
                                    L = L)
     

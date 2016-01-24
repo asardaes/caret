@@ -1,15 +1,14 @@
-confidenceInterval <- function(object, conf.level = 0.95, conf.type = "bca", conf.gamma = 0, ...) {
+confidenceInterval <- function(object, confLevel = 0.95, confType = "bca", confGamma = 0.5, ...) {
   UseMethod("confidenceInterval")
 }
 
-confidenceInterval.default <- function(object, conf.level = 0.95, conf.type = "bca", 
-                                       L = NULL, conf.gamma = 0, subsample.sizes, 
-                                       metric = "Metric", ...) {
-  conf.type <- match.arg(conf.type, c("norm", "basic", "perc", "bca", "L"))
+confidenceInterval.default <- function(object, confLevel = 0.95, confType = "bca", confGamma = 0.5, ...,
+                                       L = NULL, subsampleSizes, metric = "Metric") {
+  confType <- match.arg(confType, c("norm", "basic", "perc", "bca", "L"))
   
-  if(conf.type != "L") {
+  if(confType != "L") {
     if(is.null(L)) stop("Empirical influence values need to be provided in L for this confidence interval")
-    out.type <- switch(conf.type,
+    out.type <- switch(confType,
                        norm = "normal",
                        basic = "basic",
                        perc = "percent",
@@ -21,24 +20,24 @@ confidenceInterval.default <- function(object, conf.level = 0.95, conf.type = "b
               call = "")
     
     if(min(B$t[,1]) != max(B$t[,1])) {
-      metricCI <- tryCatch(boot::boot.ci(B, type = conf.type, L = L, conf = conf.level, ...)[[out.type]],
+      metricCI <- tryCatch(boot::boot.ci(B, type = confType, L = L, conf = confLevel, ...)[[out.type]],
                            warning = function(w) w,
                            error = function(e) e)
       
       if (!inherits(metricCI, "condition")) {
-        if(conf.type != "norm") metricCI <- metricCI[-c(2:3)]
+        if(confType != "norm") metricCI <- metricCI[-c(2:3)]
         metricCI <- c(B$t0, metricCI)
         
-      } else metricCI <- c(B$t0, conf.level, -Inf, Inf)
-    } else metricCI <- c(B$t0, conf.level, -Inf, Inf)
+      } else metricCI <- c(B$t0, confLevel, -Inf, Inf)
+    } else metricCI <- c(B$t0, confLevel, -Inf, Inf)
     
   } else {
-    if(length(object) != length(subsample.sizes))
-      stop("Length mismatch between 'object' and 'subsample.sizes'")
+    if(length(object) != length(subsampleSizes))
+      stop("Length mismatch between 'object' and 'subsampleSizes'")
     
     Tn <- mean(object)
-    Tao_n <- length(object) ^ conf.gamma
-    Tao_b <- subsample.sizes ^ conf.gamma
+    Tao_n <- length(object) ^ confGamma
+    Tao_b <- subsampleSizes ^ confGamma
     
     obj_std <- Tao_b * (object - Tn)
     x <- seq(from = min(obj_std), to = max(obj_std), length.out = 1000L)
@@ -46,37 +45,38 @@ confidenceInterval.default <- function(object, conf.level = 0.95, conf.type = "b
     Ln <- sapply(x, function(x) mean(obj_std <= x))
     # plot(x, Ln) to check
     
-    alpha <- (1 - conf.level) / 2
+    alpha <- (1 - confLevel) / 2
     
     # this could return Inf
     suppressWarnings(c_n <- c(min(x[Ln >= alpha]), min(x[Ln >= 1 - alpha])))
     
     metricCI <- Tn + c_n / Tao_n
     
-    metricCI <- c(Tn, conf.level, metricCI)
+    metricCI <- c(Tn, confLevel, metricCI)
   }
   
   names(metricCI) <- c(metric, "ConfLevel", "Lower", "Upper")
   
-  attr(metricCI, "conf.type") <- conf.type
+  attr(metricCI, "confType") <- confType
   
   metricCI
 }
 
 confidenceInterval.train <- function(object,
-                                     conf.level = object$control$confLevel,
-                                     conf.type = object$control$confType,
-                                     conf.gamma = object$control$confGamma,
+                                     confLevel = object$control$confLevel,
+                                     confType = object$control$confType,
+                                     confGamma = object$control$confGamma,
                                      ...) {
-  force(conf.level)
-  force(conf.type)
-  subsample.sizes <- lengths(object$control$indexOut)
+  force(confLevel)
+  force(confType)
+  subsampleSizes <- lengths(object$control$indexOut)
   
-  if(!is.null(object$resample) && !is.null(object$control$confLevel)) {
-    if(conf.type != "L" && object$control$confType == "L") {
-      stop("confType must be set to something different than 'L' during training to be able to calculate this interval")
+  if(is.null(confLevel)) return(NULL)
+  
+  if(!is.null(object$resample)) {
+    if(confType != "L") {
+      if(is.null(object$empInf)) stop("The empirical influence values are not present in the object")
       
-    } else if(conf.type != "L") {
       L <- merge(object$empInf, object$bestTune)
       L <- as.numeric(L[ , grepl("^\\.obs", colnames(L))])
       
@@ -88,8 +88,8 @@ confidenceInterval.train <- function(object,
     object <- merge(object$resample, object$bestTune)[[metric]]
     
     NextMethod("confidenceInterval",
-               conf.level = conf.level, conf.type = conf.type, 
-               L = L, metric = metric, subsample.sizes = subsample.sizes, ...)
+               confLevel = confLevel, confType = confType, 
+               L = L, metric = metric, subsampleSizes = subsampleSizes, ...)
     
-  } else stop("Resample results are not available or confidence level was set to NULL")
+  } else stop("Resample results are not available.")
 }
