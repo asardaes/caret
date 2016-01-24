@@ -610,17 +610,23 @@ train.default <- function(x, y,
     tmp$predictions <- merge(bestTune, tmp$predictions)
   
   ## confidence interval
-  if(!is.null(byResample) && !is.null(trControl$conf.level)) {
-    L <- merge(empInf, bestTune)
-    L <- as.numeric(L[ , grepl("^\\.obs", colnames(L))])
+  if(!is.null(byResample) && !is.null(trControl$confLevel)) {
+    if(trControl$confType != "L") {
+      L <- merge(empInf, bestTune)
+      L <- as.numeric(L[ , grepl("^\\.obs", colnames(L))])
+      
+    } else L <- NULL
     
     ## in case of trControl$returnResamp = "all"
     t <- merge(byResample, bestTune)[[metric]]
     
     metricCI <- confidenceInterval(t,
-                                   conf.level = trControl$conf.level,
-                                   conf.type = trControl$conf.type,
-                                   L = L, metric = metric)
+                                   conf.level = trControl$confLevel,
+                                   conf.type = trControl$confType,
+                                   conf.gamma = trControl$confGamma,
+                                   subsample.sizes = lengths(trControl$indexOut),
+                                   metric = metric,
+                                   L = L)
     
   } else metricCI <- NULL
   

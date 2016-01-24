@@ -192,7 +192,7 @@ stringFunc <- function (x)  {
       if(nchar(optString) > 0L) cat("\n")
     } else printMat <- NULL
     
-    if(!is.null(x$metricCI) && !is.na(x$metricCI[2])) {
+    if(!is.null(x$metricCI) && !is.infinite(x$metricCI[3])) {
       metricCI <- x$metricCI
       metricCI[2] <- metricCI[2] * 100
       metricCI <- formatC(metricCI)

@@ -111,21 +111,23 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     ctrl$indexOut <- c(list("AllData" = rep(0, nrow(x))),  ctrl$indexOut)
   }
   
-  if(!is.null(ctrl$conf.level)) {
-    ctrl$conf.type <- match.arg(ctrl$conf.type, c("norm", "basic", "perc", "bca"))
+  if(!is.null(ctrl$confLevel)) {
+    ctrl$confType <- match.arg(ctrl$confType, c("norm", "basic", "perc", "bca", "L"))
     
-    .empInfUpdate <- empInfFun(tuneGrid, nrow(x))
-    
-    if(ctrl$allowParallel && getDoParWorkers() > 1L) {
-      ## one object for each worker
-      foreach(i = seq_len(getDoParWorkers()),
-              .packages = c("stats")) %dopar% {
-                .empInfUpdate <<- .empInfUpdate # a bit hacky
-                NULL
-              }
+    if(ctrl$confType != "L") {
+      .empInfUpdate <- empInfFun(tuneGrid, nrow(x))
       
-      ## remove the object from this environment so that it doesn't get exported
-      rm(.empInfUpdate)
+      if(ctrl$allowParallel && getDoParWorkers() > 1L) {
+        ## one object for each worker
+        foreach(i = seq_len(getDoParWorkers()),
+                .packages = c("stats")) %dopar% {
+                  .empInfUpdate <<- .empInfUpdate # a bit hacky
+                  NULL
+                }
+        
+        ## remove the object from this environment so that it doesn't get exported
+        rm(.empInfUpdate)
+      }
     }
   }
   
@@ -318,7 +320,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     if(testing) print(head(predicted))
     
     ## empirical influence of holdout samples for BCa-CI
-    if(!is.null(ctrl$conf.level) && names(resampleIndex)[iter] != "AllData") {
+    if(!is.null(ctrl$confLevel) && ctrl$confType != "L" && names(resampleIndex)[iter] != "AllData") {
       statFun <- function(df, ids, ...) ctrl$summaryFunction(df[ids, , drop = FALSE])
       empInf <- do.call(rbind, lapply(predicted, function(df) {
         empinf(data = df, statistic = statFun, index = metric)
@@ -396,7 +398,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     thisResample <- cbind(thisResample, info$loop[parm,,drop = FALSE])
     
     ## empirical influence of holdout samples for BCa-CI
-    if(!is.null(ctrl$conf.level) && names(resampleIndex)[iter] != "AllData") {
+    if(!is.null(ctrl$confLevel) && ctrl$confType != "L" && names(resampleIndex)[iter] != "AllData") {
       statFun <- function(df, ids, ...) ctrl$summaryFunction(df[ids, , drop = FALSE])
       empInf <- empinf(data = tmp, statistic = statFun, index = metric)
       .empInfUpdate(empInf, holdoutIndex, info$loop[parm, , drop = FALSE])
@@ -453,7 +455,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
   }
   
   ## obtain final empirical influence values for each replication
-  if(!is.null(ctrl$conf.level)) {
+  if(!is.null(ctrl$confLevel) && ctrl$confType != "L") {
     if(ctrl$allowParallel && getDoParWorkers() > 1L) {
       empInf <- foreach(i = seq_len(getDoParWorkers()), .combine = c) %dopar% {
         ret <- .empInfUpdate()
