@@ -610,31 +610,17 @@ train.default <- function(x, y,
     tmp$predictions <- merge(bestTune, tmp$predictions)
   
   ## confidence interval
-  if(!is.null(byResample) && !is.null(trControl$conf)) {
+  if(!is.null(byResample) && !is.null(trControl$conf.level)) {
     L <- merge(empInf, bestTune)
     L <- as.numeric(L[ , grepl("^\\.obs", colnames(L))])
     
     ## in case of trControl$returnResamp = "all"
-    t <- merge(byResample, bestTune)
+    t <- merge(byResample, bestTune)[[metric]]
     
-    B <- list(t0 = mean(t[[metric]]), 
-              t = t[metric], 
-              R = nrow(t), 
-              call = "")
-    
-    if(min(B$t[,1]) != max(B$t[,1])) {
-      metricCI <- tryCatch(boot::boot.ci(B, type = "bca", L = L, conf = trControl$conf)$bca[-c(2,3)],
-                           warning = function(w) w,
-                           error = function(e) e)
-      
-      if (!inherits(metricCI, "condition")) {
-        metricCI[1] <- round(metricCI[1]*100)
-        metricCI <- c(B$t0, metricCI)
-        
-      } else metricCI <- c(B$t0, NA, NA, NA)
-    } else metricCI <- c(B$t0, NA, NA, NA)
-    
-    names(metricCI) <- c(metric, "ConfLevel", "Lower", "Upper")
+    metricCI <- confidenceInterval(t,
+                                   conf.level = trControl$conf.level,
+                                   conf.type = trControl$conf.type,
+                                   L = L, metric = metric)
     
   } else metricCI <- NULL
   

@@ -204,33 +204,7 @@ confusionMatrix.train <- function(data, norm = "overall", dnn = c("Prediction", 
   names(dimnames(overall)) <- dnn  
   
   ## confidence interval
-  if(!is.null(data$resample) && !is.null(data$control$conf)) {
-    L <- merge(data$empInf, data$bestTune)
-    L <- as.numeric(L[ , grepl("^\\.obs", colnames(L))])
-    
-    ## in case of trControl$returnResamp = "all"
-    t <- merge(data$resample, data$bestTune)
-    
-    B <- list(t0 = mean(t[[data$metric]]), 
-              t = t[data$metric], 
-              R = nrow(t), 
-              call = "")
-    
-    if(min(B$t[,1]) != max(B$t[,1])) {
-      metricCI <- tryCatch(boot::boot.ci(B, type = "bca", L = L, ...)$bca[-c(2,3)],
-                           warning = function(w) w,
-                           error = function(e) e)
-      
-      if (!inherits(metricCI, "condition")) {
-        metricCI[1] <- round(metricCI[1]*100)
-        metricCI <- c(B$t0, metricCI)
-        
-      } else metricCI <- c(B$t0, NA, NA, NA)
-    } else metricCI <- c(B$t0, NA, NA, NA)
-    
-    names(metricCI) <- c(data$metric, "ConfLevel", "Lower", "Upper")
-    
-  } else metricCI <- NULL
+  metricCI <- confidenceInterval(data, ...)
   
   ## out
   out <- list(table = as.table(overall),
@@ -258,7 +232,9 @@ print.confusionMatrix.train <- function(x, digits = 1, ...)
   } else {
     print(round(x$table, digits)) 
     if(!is.null(x$metricCI)) {
-      metricCI <- formatC(x$metricCI)
+      metricCI <- x$metricCI
+      metricCI[2] <- metricCI[2] * 100
+      metricCI <- formatC(metricCI)
 
       if(!is.na(x$metricCI[2])) {
         lhs <- paste(c(names(metricCI)[1], paste0(metricCI[2], "% CI")), ":")

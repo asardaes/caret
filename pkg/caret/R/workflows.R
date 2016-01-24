@@ -111,7 +111,9 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     ctrl$indexOut <- c(list("AllData" = rep(0, nrow(x))),  ctrl$indexOut)
   }
   
-  if(!is.null(ctrl$conf)) {
+  if(!is.null(ctrl$conf.level)) {
+    ctrl$conf.type <- match.arg(ctrl$conf.type, c("norm", "basic", "perc", "bca"))
+    
     .empInfUpdate <- empInfFun(tuneGrid, nrow(x))
     
     if(ctrl$allowParallel && getDoParWorkers() > 1L) {
@@ -316,7 +318,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     if(testing) print(head(predicted))
     
     ## empirical influence of holdout samples for BCa-CI
-    if(!is.null(ctrl$conf) && names(resampleIndex)[iter] != "AllData") {
+    if(!is.null(ctrl$conf.level) && names(resampleIndex)[iter] != "AllData") {
       statFun <- function(df, ids, ...) ctrl$summaryFunction(df[ids, , drop = FALSE])
       empInf <- do.call(rbind, lapply(predicted, function(df) {
         empinf(data = df, statistic = statFun, index = metric)
@@ -394,7 +396,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     thisResample <- cbind(thisResample, info$loop[parm,,drop = FALSE])
     
     ## empirical influence of holdout samples for BCa-CI
-    if(!is.null(ctrl$conf) && names(resampleIndex)[iter] != "AllData") {
+    if(!is.null(ctrl$conf.level) && names(resampleIndex)[iter] != "AllData") {
       statFun <- function(df, ids, ...) ctrl$summaryFunction(df[ids, , drop = FALSE])
       empInf <- empinf(data = tmp, statistic = statFun, index = metric)
       .empInfUpdate(empInf, holdoutIndex, info$loop[parm, , drop = FALSE])
@@ -451,7 +453,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
   }
   
   ## obtain final empirical influence values for each replication
-  if(!is.null(ctrl$conf)) {
+  if(!is.null(ctrl$conf.level)) {
     if(ctrl$allowParallel && getDoParWorkers() > 1L) {
       empInf <- foreach(i = seq_len(getDoParWorkers()), .combine = c) %dopar% {
         ret <- .empInfUpdate()
