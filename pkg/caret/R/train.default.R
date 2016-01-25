@@ -427,6 +427,7 @@ train.default <- function(x, y,
     }
     
     empInf <- tmp$empInf
+    subsamples <- tmp$subsamples
     
     ## TODO we used to give resampled results for LOO
     if(!(trControl$method %in% c("LOOCV", "oob"))) {
@@ -615,7 +616,11 @@ train.default <- function(x, y,
       L <- merge(empInf, bestTune)
       L <- as.numeric(L[ , grepl("^\\.obs", colnames(L))])
       
-    } else L <- NULL
+    } else {
+      if(is.character(trControl$confGamma)) 
+        trControl$confGamma <- if(!is.null(subsamples)) merge(subsamples, bestTune)$alpha else NULL
+      L <- NULL
+    }
     
     ## in case of trControl$returnResamp = "all"
     t <- merge(byResample, bestTune)[[metric]]
@@ -629,6 +634,8 @@ train.default <- function(x, y,
                                    L = L)
     
   } else metricCI <- NULL
+  
+  if(is.character(trControl$confGamma)) trControl$confGamma <- NULL
   
   endTime <- proc.time()
   times <- list(everything = endTime - startTime,

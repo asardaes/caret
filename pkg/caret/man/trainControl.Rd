@@ -31,7 +31,7 @@ trainControl(method = "boot",
              allowParallel = TRUE,
              confType = "bca",
              confLevel = NULL,
-             confGamma = 0.5)
+             confGamma = "range")
 }
 \arguments{
   \item{method}{The resampling method: \code{"boot"}, \code{"boot632"}, \code{"cv"}, \code{"repeatedcv"},
@@ -60,8 +60,8 @@ trainControl(method = "boot",
   \item{trim}{a logical. If \code{TRUE} the final model in \code{object\$finalModel} may have some components of the object removed so reduce the size of the saved object. The \code{predict} method will still work, but some other features of the model may not work. \code{trim}ing will occur only for models where this feature has been implemented. }
   \item{allowParallel}{if a parallel backend is loaded and available, should the function use it?}
   \item{confType}{Type of confidence interval to compute. See Details.}
-  \item{confLevel}{Confidence level for the confidence interval. See Details.}
-  \item{confGamma}{Normalization exponent for "L" confidence interval.}
+  \item{confLevel}{Confidence level for the confidence interval.}
+  \item{confGamma}{Normalization exponent for "L" confidence interval. A string means it will be estimated and returned in the \code{\link{train}} result's \code{control}. Valid options are "range" and "quantile".}
 }
 
 \value{
@@ -84,7 +84,7 @@ Using adaptive resampling when \code{method} is either \code{"adaptive_cv"}, \co
 
 The option \code{search = "grid"} uses the default grid search routine. When \code{search = "random"}, a random search procedure is used (Bergstra and Bengio, 2012). See \url{http://topepo.github.io/caret/random.html} for details and an example.
 
-The confidence interval is calculated using \code{\link{confidenceInterval}}. It will be calculated for the user's chosen \code{metric}. This might require more time and memory, so set \code{confLevel} to \code{NULL} to prevent the computations from being performed. The resulting interval could be \code{NULL} or infinite. For more information, see the documentation for \code{\link{confidenceInterval}}.
+The confidence interval is calculated using \code{\link{confidenceInterval}}. It will be calculated for the user's chosen \code{metric}, but the interpretation differs depending on \code{confType}. This might require more time and memory, so set \code{confLevel} to \code{NULL} to prevent the computations from being performed. The resulting interval could be \code{NULL} or infinite. For more information, see the documentation for \code{\link{confidenceInterval}}.
 }
 
 \author{Max Kuhn}

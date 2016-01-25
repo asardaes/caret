@@ -111,6 +111,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     ctrl$indexOut <- c(list("AllData" = rep(0, nrow(x))),  ctrl$indexOut)
   }
   
+  ## for confidence intervals
   if(!is.null(ctrl$confLevel)) {
     ctrl$confType <- match.arg(ctrl$confType, c("norm", "basic", "perc", "bca", "L"))
     
@@ -127,6 +128,17 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
         
         ## remove the object from this environment so that it doesn't get exported
         rm(.empInfUpdate)
+      }
+    } else if(is.character(ctrl$confGamma)) {
+      ctrl$confGamma <- match.arg(ctrl$confGamma, c("range", "quantile"))
+      
+      ## subsamples for L-CI
+      b_in <- round(sapply(1:20, function(i) { nrow(x) ^ (1 / 2 * ((1 + i / (20 + 1)))) }))
+      
+      if(any(min(lengths(ctrl$indexOut)) < b_in)) {
+        ss <- min(lengths(ctrl$indexOut))
+        b_in <- round(seq(from = ss, to = 1, length.out = 21L))
+        b_in <- b_in[-21L]
       }
     }
   }
@@ -365,6 +377,18 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     thisResample <- do.call("rbind", thisResample)          
     thisResample <- cbind(allParam, thisResample)
     
+    ## subsample metrics for L-CI
+    if(!is.null(ctrl$confLevel) && ctrl$confType == "L" && is.character(ctrl$confGamma) && names(resampleIndex)[iter] != "AllData") {
+      id_b_in <- mapply(predicted, b_in, FUN = function(tmp, n) sample(nrow(tmp), n), SIMPLIFY = FALSE)
+      thisSubsample <- lapply(predicted, function(tmp) {
+        sapply(id_b_in, function(id) ctrl$summaryFunction(tmp[id, , drop = FALSE], lev = lev, model = method)[metric] )
+      })
+      thisSubsample <- do.call(rbind, thisSubsample)
+      thisSubsample <- cbind(allParam, thisSubsample)
+      colnames(thisSubsample) <- c(colnames(allParam), paste0(".sub", 1:20))
+      
+    } else thisSubsample <- NULL
+    
   } else {       
     if(is.factor(y)) predicted <- factor(as.character(predicted), levels = lev)
     tmp <-  data.frame(pred = predicted,
@@ -404,13 +428,23 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
       .empInfUpdate(empInf, holdoutIndex, info$loop[parm, , drop = FALSE])
     }
     
+    ## subsample metrics for L-CI
+    if(!is.null(ctrl$confLevel) && ctrl$confType == "L" && is.character(ctrl$confGamma) && names(resampleIndex)[iter] != "AllData") {
+      id_b_in <- lapply(b_in, function(n) sample(nrow(tmp), n))
+      thisSubsample <- sapply(id_b_in, function(id) {
+        ctrl$summaryFunction(tmp[id, , drop = FALSE], lev = lev, model = method)[metric]
+      })
+      thisSubsample <- cbind(info$loop[parm, , drop = FALSE], rbind(thisSubsample))
+      colnames(thisSubsample) <- c(colnames(info$loop), paste0(".sub", 1:20))
+      
+    } else thisSubsample <- NULL
   }
   
   thisResample$Resample <- names(resampleIndex)[iter]
   
   if(ctrl$verboseIter) progress(printed[parm,,drop = FALSE],
                                 names(resampleIndex), iter, FALSE)
-  list(resamples = thisResample, pred = tmpPred)
+  list(resamples = thisResample, pred = tmpPred, subsamples = thisSubsample)
 }
   
   resamples <- rbind.fill(result[names(result) == "resamples"])
@@ -492,8 +526,40 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     
   } else empInf = NULL
   
+  ## final estimate for L-CI exponent
+  if(!is.null(ctrl$confLevel) && ctrl$confType == "L" && is.character(ctrl$confGamma)) {
+    subsamples <- rbind.fill(result[names(result) == "subsamples"])
+    id_sub <- grepl("^\\.sub", colnames(subsamples))
+    subsamples <- split(subsamples, as.list(subsamples[ , !id_sub, drop = FALSE]))
+    y_ij <- lapply(subsamples, function(x) {
+      ret <- as.matrix(x[ , id_sub, drop = FALSE])
+      
+      if(ctrl$confGamma == "range") {
+        q1 <- t(apply(ret, 2, quantile, probs = seq(from = 0.25, to = 0.01, length.out = 10)))
+        q2 <- t(apply(ret, 2, quantile, probs = seq(from = 0.75, to = 0.99, length.out = 10)))
+        ret <- log(q2 - q1)
+      
+      } else {
+        q0 <- t(apply(ret, 2, quantile, probs = seq(from = 0.75, to = 0.95, length.out = 15)))
+        ret <- log(q0)
+      }
+      ret[is.infinite(ret)] <- NA
+      ret
+    })
+    y_i. <- lapply(y_ij, rowMeans, na.rm = TRUE)
+    y_bar <- lapply(y_ij, mean, na.rm = TRUE)
+    log_bin <- log(b_in)
+    log_bar <- mean(log_bin)
+    alpha_IJ <- sum((log_bin - log_bar)^2) # denominator
+    alpha_IJ <- mapply(y_i., y_bar, FUN = function(yi., ybar) { -sum((yi. - ybar) * (log_bin - log_bar)) }) / alpha_IJ
+    
+    subsamples <- lapply(subsamples, function(x) x[1, !id_sub, drop = FALSE])
+    subsamples <- data.frame(rbind.fill(subsamples), alpha = alpha_IJ)
+    
+  } else subsamples <- NULL
+  
   list(performance = out, resamples = resamples, predictions = if(keep_pred) pred else NULL,
-       empInf = empInf)
+       empInf = empInf, subsamples = subsamples)
 }
 
 

@@ -1,8 +1,8 @@
-confidenceInterval <- function(object, confLevel = 0.95, confType = "bca", confGamma = 0.5, ...) {
+confidenceInterval <- function(object, confLevel = 0.95, confType = "bca", confGamma = NULL, ...) {
   UseMethod("confidenceInterval")
 }
 
-confidenceInterval.default <- function(object, confLevel = 0.95, confType = "bca", confGamma = 0.5, ...,
+confidenceInterval.default <- function(object, confLevel = 0.95, confType = "bca", confGamma = NULL, ...,
                                        L = NULL, subsampleSizes, metric = "Metric") {
   confType <- match.arg(confType, c("norm", "basic", "perc", "bca", "L"))
   
@@ -69,6 +69,7 @@ confidenceInterval.train <- function(object,
                                      ...) {
   force(confLevel)
   force(confType)
+  force(confGamma)
   subsampleSizes <- lengths(object$control$indexOut)
   
   if(is.null(confLevel)) return(NULL)
@@ -80,7 +81,11 @@ confidenceInterval.train <- function(object,
       L <- merge(object$empInf, object$bestTune)
       L <- as.numeric(L[ , grepl("^\\.obs", colnames(L))])
       
-    } else L <- NULL
+    } else {
+      if(is.null(confGamma) || !is.numeric(confGamma)) 
+        stop("Gamma was not estimated or was not provided. Please set its value manually.")
+      L <- NULL
+    }
     
     metric <- object$metric
     
@@ -88,7 +93,7 @@ confidenceInterval.train <- function(object,
     object <- merge(object$resample, object$bestTune)[[metric]]
     
     NextMethod("confidenceInterval",
-               confLevel = confLevel, confType = confType, 
+               confLevel = confLevel, confType = confType, confGamma = confGamma,
                L = L, metric = metric, subsampleSizes = subsampleSizes, ...)
     
   } else stop("Resample results are not available.")
