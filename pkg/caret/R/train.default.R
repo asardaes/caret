@@ -616,14 +616,15 @@ train.default <- function(x, y,
       L <- merge(empInf, bestTune)
       L <- as.numeric(L[ , grepl("^\\.obs", colnames(L))])
       
-    } else {
-      if(is.character(trControl$confGamma)) 
-        trControl$confGamma <- if(!is.null(subsamples)) merge(subsamples, bestTune)$alpha else NULL
-      L <- NULL
-    }
+    } else L <- NULL
+    
+    if(is.character(trControl$confGamma)) 
+      trControl$confGamma <- if(!is.null(subsamples)) merge(subsamples, bestTune)$alpha else NULL
     
     ## in case of trControl$returnResamp = "all"
     t <- merge(byResample, bestTune)[[metric]]
+    
+    if(trControl$confType == "both") trControl$confType <- "bca"
     
     metricCI <- confidenceInterval(t,
                                    confLevel = trControl$confLevel,

@@ -113,7 +113,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
   
   ## for confidence intervals
   if(!is.null(ctrl$confLevel)) {
-    ctrl$confType <- match.arg(ctrl$confType, c("norm", "basic", "perc", "bca", "L"))
+    ctrl$confType <- match.arg(ctrl$confType, c("norm", "basic", "perc", "bca", "L", "both"))
     
     if(ctrl$confType != "L") {
       .empInfUpdate <- empInfFun(tuneGrid, nrow(x))
@@ -129,7 +129,9 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
         ## remove the object from this environment so that it doesn't get exported
         rm(.empInfUpdate)
       }
-    } else if(is.character(ctrl$confGamma)) {
+    } 
+    
+    if(is.character(ctrl$confGamma) && ctrl$confType %in% c("L", "both")) {
       ctrl$confGamma <- match.arg(ctrl$confGamma, c("range", "quantile"))
       
       ## subsamples for L-CI
@@ -378,7 +380,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     thisResample <- cbind(allParam, thisResample)
     
     ## subsample metrics for L-CI
-    if(!is.null(ctrl$confLevel) && ctrl$confType == "L" && is.character(ctrl$confGamma) && names(resampleIndex)[iter] != "AllData") {
+    if(!is.null(ctrl$confLevel) && ctrl$confType %in% c("L", "both") && is.character(ctrl$confGamma) && names(resampleIndex)[iter] != "AllData") {
       id_b_in <- mapply(predicted, b_in, FUN = function(tmp, n) sample(nrow(tmp), n), SIMPLIFY = FALSE)
       thisSubsample <- lapply(predicted, function(tmp) {
         sapply(id_b_in, function(id) ctrl$summaryFunction(tmp[id, , drop = FALSE], lev = lev, model = method)[metric] )
@@ -429,7 +431,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     }
     
     ## subsample metrics for L-CI
-    if(!is.null(ctrl$confLevel) && ctrl$confType == "L" && is.character(ctrl$confGamma) && names(resampleIndex)[iter] != "AllData") {
+    if(!is.null(ctrl$confLevel) && ctrl$confType %in% c("L", "both") && is.character(ctrl$confGamma) && names(resampleIndex)[iter] != "AllData") {
       id_b_in <- lapply(b_in, function(n) sample(nrow(tmp), n))
       thisSubsample <- sapply(id_b_in, function(id) {
         ctrl$summaryFunction(tmp[id, , drop = FALSE], lev = lev, model = method)[metric]
@@ -527,7 +529,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
   } else empInf = NULL
   
   ## final estimate for L-CI exponent
-  if(!is.null(ctrl$confLevel) && ctrl$confType == "L" && is.character(ctrl$confGamma)) {
+  if(!is.null(ctrl$confLevel) && ctrl$confType %in% c("L", "both") && is.character(ctrl$confGamma)) {
     subsamples <- rbind.fill(result[names(result) == "subsamples"])
     id_sub <- grepl("^\\.sub", colnames(subsamples))
     subsamples <- split(subsamples, as.list(subsamples[ , !id_sub, drop = FALSE]))

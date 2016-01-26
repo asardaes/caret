@@ -59,7 +59,7 @@ trainControl(method = "boot",
   \item{adaptive}{a list used when \code{method} is \code{"adaptive_cv"}, \code{"adaptive_boot"} or \code{"adaptive_LGOCV"}. See Details below. }
   \item{trim}{a logical. If \code{TRUE} the final model in \code{object\$finalModel} may have some components of the object removed so reduce the size of the saved object. The \code{predict} method will still work, but some other features of the model may not work. \code{trim}ing will occur only for models where this feature has been implemented. }
   \item{allowParallel}{if a parallel backend is loaded and available, should the function use it?}
-  \item{confType}{Type of confidence interval to compute. See Details.}
+  \item{confType}{Type of confidence interval to compute. You can also specify "both" here to obtain the necessary estimates for both L and non-L intervals, but the "bca" interval will be initially returned. See Details.}
   \item{confLevel}{Confidence level for the confidence interval.}
   \item{confGamma}{Normalization exponent for "L" confidence interval. A string means it will be estimated and returned in the \code{\link{train}} result's \code{control}. Valid options are "range" and "quantile".}
 }
