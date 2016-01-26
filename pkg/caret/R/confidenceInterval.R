@@ -3,7 +3,7 @@ confidenceInterval <- function(object, confLevel = 0.95, confType = "bca", confG
 }
 
 confidenceInterval.default <- function(object, confLevel = 0.95, confType = "bca", confGamma = NULL, ...,
-                                       L = NULL, subsampleSizes, metric = "Metric") {
+                                       L = NULL, sampleSize, subsampleSizes, metric = "Metric") {
   confType <- match.arg(confType, c("norm", "basic", "perc", "bca", "L"))
   
   if(confType != "L") {
@@ -36,7 +36,7 @@ confidenceInterval.default <- function(object, confLevel = 0.95, confType = "bca
       stop("Length mismatch between 'object' and 'subsampleSizes'")
     
     Tn <- mean(object)
-    Tao_n <- length(object) ^ confGamma
+    Tao_n <- sampleSize ^ confGamma
     Tao_b <- subsampleSizes ^ confGamma
     
     obj_std <- Tao_b * (object - Tn)
@@ -70,6 +70,7 @@ confidenceInterval.train <- function(object,
   force(confLevel)
   force(confType)
   force(confGamma)
+  sampleSize <- nrow(object$trainingData)
   subsampleSizes <- lengths(object$control$indexOut)
   
   if(is.null(confLevel)) return(NULL)
@@ -94,7 +95,7 @@ confidenceInterval.train <- function(object,
     
     NextMethod("confidenceInterval",
                confLevel = confLevel, confType = confType, confGamma = confGamma,
-               L = L, metric = metric, subsampleSizes = subsampleSizes, ...)
+               L = L, metric = metric, sampleSize = sampleSize, subsampleSizes = subsampleSizes, ...)
     
   } else stop("Resample results are not available.")
 }

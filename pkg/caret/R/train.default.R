@@ -630,6 +630,7 @@ train.default <- function(x, y,
                                    confLevel = trControl$confLevel,
                                    confType = trControl$confType,
                                    confGamma = trControl$confGamma,
+                                   sampleSize = nrow(outData),
                                    subsampleSizes = lengths(trControl$indexOut),
                                    metric = metric,
                                    L = L)
