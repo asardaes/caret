@@ -15,7 +15,7 @@ importFrom(stats, .checkMFClasses, .getXlevels, aggregate, anova,
 importFrom(stats4, coef) 
 importFrom(utils, capture.output, getFromNamespace, head, 
            install.packages, installed.packages, object.size, flush.console, menu, stack)
-importFrom(boot, boot.ci)
+importFrom(boot, boot, boot.ci)
 
 export(anovaScores,
        as.data.frame.resamples,
@@ -51,6 +51,7 @@ export(anovaScores,
        cluster.resamples,
        compare_models,
        confidenceInterval,
+       confidenceInterval.train,
        confusionMatrix,
        confusionMatrix.train,
        contr.dummy,

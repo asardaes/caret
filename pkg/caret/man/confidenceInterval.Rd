@@ -1,11 +1,13 @@
 \name{confidenceInterval}
 \alias{confidenceInterval}
+\alias{confidenceInterval.train}
 \title{Compute confidence intervals for supported objects}
 \description{
-Compute confidence intervals for a given metric using the values obtained during training. All intervals except "L" are calculated using \code{\link[boot]{boot.ci}}, but note that not all of the intervals included there are supported, nor recommended. See Details.
+Compute confidence intervals for a given metric using the values obtained during training. All intervals except "L" are calculated using \code{\link[boot]{boot.ci}}, but note that not all of the intervals included there are supported. See Details.
 }
 \usage{
-confidenceInterval(object, confLevel = 0.95, confType = "bca", confGamma = NULL, ...)
+\method{confidenceInterval}{train}(object, confLevel = 0.95, confType = "bca", confGamma = NULL, ...
+                   newdata = NULL, newoutcome = NULL, bootNum = 1000)
 }
 \arguments{
   \item{object}{
@@ -22,6 +24,15 @@ confidenceInterval(object, confLevel = 0.95, confType = "bca", confGamma = NULL,
 }
   \item{\dots}{
   Ignored for now.
+}
+  \item{newdata}{
+  New data to use to calculate the interval.
+}
+  \item{newoutcome}{
+  The outcomes corresponding to \code{newdata}.
+}
+  \item{bootNum}{
+  Number of bootstrap samples for the calculation of the bootstrap intervals. Only relevant if \code{newdata} is provided.
 }
 }
 \details{
