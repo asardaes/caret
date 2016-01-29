@@ -60,33 +60,50 @@ empinf <- function(data, statistic, index, ...) {
 empInfFun <- function(Parm, num_obs)
 {
   ## pre-allocation of matrices
-  empInf <- as.data.frame(matrix(0, nrow = NROW(Parm), ncol = num_obs))
-  colnames(empInf) <- paste0(".obs", 1:ncol(empInf))
-  empInf <- data.frame(Parm, empInf)
-  num <- empInf
-  
+  empInf <- matrix(0, nrow = NROW(Parm), ncol = num_obs)
+  num <- matrix(0, nrow = NROW(Parm), ncol = num_obs)
+  colnames(empInf) <- colnames(num) <- paste0(".obs", 1:ncol(empInf))
   id_parm <- 1L:ncol(Parm)
   
   empInfUpdate <- function(newEmpInf, holdoutIndex, parm) {
     if(!missing(newEmpInf) && !missing(holdoutIndex) && length(holdoutIndex) > 0L) {
+      id_col <- as.integer(holdoutIndex)
+      
       id_row <- lapply(id_parm, function(j) Parm[ , j] %in% parm[ , j])
-      id_row <- Reduce("&", id_row)
+      id_row <- which(Reduce("&", id_row))
       
-      if(nrow(parm) > 1L && sum(id_row) > 1L) newEmpInf <- stats::aggregate(newEmpInf, by = as.list(parm), sum)[ , -id_parm, drop = FALSE]
+      if(is.matrix(newEmpInf)) {
+        if(nrow(parm) > 1L && length(id_row) != nrow(parm)) 
+          newEmpInf <- stats::aggregate(newEmpInf, by = as.list(parm), sum)[ , -id_parm, drop = FALSE]
+        
+        n <- nrow(newEmpInf)
+        m <- ncol(newEmpInf)
+        
+      } else {
+        n <- 1L
+        m <- length(newEmpInf)
+      }
       
-      empInf[id_row, holdoutIndex + ncol(parm)] <<- empInf[id_row, holdoutIndex + ncol(parm), drop = FALSE] + 
-        newEmpInf
+      if(any(id_col > ncol(empInf)) || n != length(id_row) || m != length(id_col))
+        stop("Dimension mismatch while calculating empirical influence values.")
       
-      if(nrow(parm) > 1L && sum(id_row) > 1L)
-        newNum <- stats::aggregate(matrix(1L, nrow(parm), 1L), by = as.list(parm), sum)$V1
+      newEmpInf <- as.numeric(t(newEmpInf))
+      .Call("empInfUpdate", empInf, nrow(empInf), id_row, id_col, newEmpInf, PACKAGE = "caret")
+      
+      if(nrow(parm) > 1L && length(id_row) != nrow(parm))
+        newNum <- stats::aggregate(matrix(1, nrow(parm), 1L), by = as.list(parm), sum)$V1
       else
-        newNum <- nrow(parm)
+        newNum <- rep(1, nrow(parm))
       
-      num[id_row, holdoutIndex + ncol(parm)] <<- num[id_row, holdoutIndex + ncol(parm)] + 
-        newNum
+      newNum <- as.numeric(rep_len(newNum, length.out = length(newEmpInf)))
+      .Call("empInfUpdate", num, nrow(num), id_row, id_col, newNum, PACKAGE = "caret")
+      
+      invisible(NULL)
+      
+    } else {
+      list(empInf = data.frame(Parm, as.data.frame(empInf)),
+           num = data.frame(Parm, as.data.frame(num)))
     }
-    
-    list(empInf = empInf, num = num)
   }
   
   empInfUpdate
@@ -116,18 +133,15 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     ctrl$confType <- match.arg(ctrl$confType, c("norm", "basic", "perc", "bca", "L", "both"))
     
     if(ctrl$confType != "L") {
-      .empInfUpdate <- empInfFun(tuneGrid, nrow(x))
-      
       if(ctrl$allowParallel && getDoParWorkers() > 1L) {
         ## one object for each worker
         foreach(i = seq_len(getDoParWorkers()),
-                .packages = c("stats")) %dopar% {
-                  .empInfUpdate <<- .empInfUpdate # a bit hacky
+                .packages = c("stats", "caret")) %dopar% {
+                  assign(".empInfUpdate", empInfFun(tuneGrid, nrow(x)), globalenv())
                   NULL
                 }
-        
-        ## remove the object from this environment so that it doesn't get exported
-        rm(.empInfUpdate)
+      } else {
+        .empInfUpdate <- empInfFun(tuneGrid, nrow(x))
       }
     } 
     

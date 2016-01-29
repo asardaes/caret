@@ -23,7 +23,7 @@ trainControl <- function(method = "boot",
                          adaptive = list(min = 5, alpha = 0.05, method = "gls", complete = TRUE),
                          trim = FALSE,
                          allowParallel = TRUE,
-                         confType = "bca",
+                         confType = "L",
                          confLevel = NULL,
                          confGamma = "range")
 {

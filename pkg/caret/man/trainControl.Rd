@@ -29,7 +29,7 @@ trainControl(method = "boot",
              	               method = "gls", complete = TRUE),
              trim = FALSE,
              allowParallel = TRUE,
-             confType = "bca",
+             confType = "L",
              confLevel = NULL,
              confGamma = "range")
 }
