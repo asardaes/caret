@@ -1,8 +1,8 @@
-confidenceInterval <- function(object, confLevel = 0.95, confType = "bca", confGamma = NULL, ...) {
+confidenceInterval <- function(object, confLevel = 0.95, confType = "L", confGamma = NULL, ...) {
   UseMethod("confidenceInterval")
 }
 
-confidenceInterval.default <- function(object, confLevel = 0.95, confType = "bca", confGamma = NULL, ...,
+confidenceInterval.default <- function(object, confLevel = 0.95, confType = "L", confGamma = NULL, ...,
                                        L = NULL, sampleSize, subsampleSizes, metric = "Metric") {
   confType <- match.arg(confType, c("norm", "basic", "perc", "bca", "L"))
   

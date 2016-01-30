@@ -6,8 +6,14 @@
 Compute confidence intervals for a given metric using the values obtained during training. All intervals except "L" are calculated using \code{\link[boot]{boot.ci}}, but note that not all of the intervals included there are supported. See Details.
 }
 \usage{
-\method{confidenceInterval}{train}(object, confLevel = 0.95, confType = "bca", confGamma = NULL, ...
-                   newdata = NULL, newoutcome = NULL, bootNum = 1000)
+\method{confidenceInterval}{train}(object,
+                   confLevel = object$control$confLevel,
+                   confType = object$control$confType,
+                   confGamma = object$control$confGamma,
+                   ...,
+                   newdata = NULL,
+                   newoutcome = NULL,
+                   bootNum = 1000)
 }
 \arguments{
   \item{object}{

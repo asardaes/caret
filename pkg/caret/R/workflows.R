@@ -137,9 +137,15 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
         ## one object for each worker
         foreach(i = seq_len(getDoParWorkers()),
                 .packages = c("stats", "caret")) %dopar% {
-                  assign(".empInfUpdate", empInfFun(tuneGrid, nrow(x)), globalenv())
+                  attach(new.env(parent = globalenv()), name = "caret:empInfUpdate")
+                  assign(".empInfUpdate", empInfFun(tuneGrid, nrow(x)), "caret:empInfUpdate")
                   NULL
                 }
+        
+        on.exit(expr = {
+          foreach(i = seq_len(getDoParWorkers())) %dopar% detach("caret:empInfUpdate")
+        })
+        
       } else {
         .empInfUpdate <- empInfFun(tuneGrid, nrow(x))
       }
@@ -509,9 +515,11 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     if(ctrl$allowParallel && getDoParWorkers() > 1L) {
       empInf <- foreach(i = seq_len(getDoParWorkers()), .combine = c) %dopar% {
         ret <- .empInfUpdate()
-        rm(".empInfUpdate", pos = globalenv()) # clean parallel worker
+        detach("caret:empInfUpdate") # clean parallel worker
         ret
       }
+      
+      on.exit()
       
       empInfNum <- rbind.fill(empInf[names(empInf) == "num"])
       empInf <- rbind.fill(empInf[names(empInf) == "empInf"])
