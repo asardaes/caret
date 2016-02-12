@@ -88,7 +88,7 @@ confidenceInterval.train <- function(object,
         L <- as.numeric(L[ , grepl("^\\.obs", colnames(L))])
         
       } else {
-        if(is.null(confGamma) || !is.numeric(confGamma)) 
+        if(is.null(confGamma) || is.na(confGamma) || !is.numeric(confGamma)) 
           stop("Gamma was not estimated or was not provided. Please set its value manually.")
         L <- NULL
       }

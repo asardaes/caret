@@ -45,7 +45,9 @@ expandParameters <- function(fixed, seq)
 empinf <- function(data, statistic, index, ...) {
   n <- NROW(data)
   i0 <- seq_len(n)
+  
   tobs <- statistic(data, i0, ...)
+  
   if(is.null(names(tobs)) && is.character(index)) index <- 1L
   tobs <- tobs[index]
   

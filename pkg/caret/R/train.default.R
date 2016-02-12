@@ -619,7 +619,7 @@ train.default <- function(x, y,
     } else L <- NULL
     
     if(is.character(trControl$confGamma)) 
-      trControl$confGamma <- if(!is.null(subsamples)) merge(subsamples, bestTune)$alpha else NULL
+      trControl$confGamma <- if(!is.null(subsamples)) merge(subsamples, bestTune)$alpha else NA
     
     ## in case of trControl$returnResamp = "all"
     t <- merge(byResample, bestTune)[[metric]]
@@ -637,7 +637,7 @@ train.default <- function(x, y,
     
   } else metricCI <- NULL
   
-  if(is.character(trControl$confGamma)) trControl$confGamma <- NULL
+  if(is.character(trControl$confGamma)) trControl$confGamma <- NA
   
   endTime <- proc.time()
   times <- list(everything = endTime - startTime,
