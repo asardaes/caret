@@ -54,7 +54,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
   ## fitting and predicting the full data set.
   
   resampleIndex <- ctrl$index
-  if(ctrl$method %in% c("boot632"))
+  if(isTRUE(grepl("boot632|optimism", ctrl$method)))
   {
     resampleIndex <- c(list("AllData" = rep(0, nrow(x))), resampleIndex)
     ctrl$indexOut <- c(list("AllData" = rep(0, nrow(x))),  ctrl$indexOut)
@@ -104,27 +104,61 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
   
   if(class(mod)[1] != "try-error")
   {
-    predicted <- try(
-      predictionFunction(method = method,
-                         modelFit = mod$fit,
-                         newdata = x[holdoutIndex,, drop = FALSE],
-                         preProc = mod$preProc,
-                         param = submod),
-      silent = TRUE)
-    
-    if(class(predicted)[1] == "try-error")
-    {
-      wrn <- paste(colnames(printed[parm,,drop = FALSE]),
-                   printed[parm,,drop = FALSE],
-                   sep = "=",
-                   collapse = ", ")
-      wrn <- paste("predictions failed for ", names(resampleIndex)[iter],
-                   ": ", wrn, " ", as.character(predicted), sep = "")
-      if(ctrl$verboseIter) cat(wrn, "\n")
-      warning(wrn)
-      rm(wrn)
+    if(!grepl("optimism", ctrl$method) || names(resampleIndex)[iter] == "AllData") holdoutIndex <- list(holdoutIndex)
+    predicted <- lapply(holdoutIndex, function(holdoutIndex) {
+      predicted <- try(
+        predictionFunction(method = method,
+                           modelFit = mod$fit,
+                           newdata = x[holdoutIndex,, drop = FALSE],
+                           preProc = mod$preProc,
+                           param = submod),
+        silent = TRUE)
       
-      ## setup a dummy results with NA values for all predictions
+      if(class(predicted)[1] == "try-error")
+      {
+        wrn <- paste(colnames(printed[parm,,drop = FALSE]),
+                     printed[parm,,drop = FALSE],
+                     sep = "=",
+                     collapse = ", ")
+        wrn <- paste("predictions failed for ", names(resampleIndex)[iter],
+                     ": ", wrn, " ", as.character(predicted), sep = "")
+        if(ctrl$verboseIter) cat(wrn, "\n")
+        warning(wrn)
+        rm(wrn)
+        
+        ## setup a dummy results with NA values for all predictions
+        nPred <- length(holdoutIndex)
+        if(!is.null(lev))
+        {
+          predicted <- rep("", nPred)
+          predicted[seq(along = predicted)] <- NA
+        } else {
+          predicted <- rep(NA, nPred)
+        }
+        if(!is.null(submod))
+        {
+          tmp <- predicted
+          predicted <- vector(mode = "list", length = nrow(info$submodels[[parm]]) + 1)
+          for(i in seq(along = predicted)) predicted[[i]] <- tmp
+          rm(tmp)
+        }
+      }
+      
+      predicted
+    })
+  } else {
+    wrn <- paste(colnames(printed[parm,,drop = FALSE]),
+                 printed[parm,,drop = FALSE],
+                 sep = "=",
+                 collapse = ", ")
+    wrn <- paste("model fit failed for ", names(resampleIndex)[iter],
+                 ": ", wrn, " ", as.character(mod), sep = "")
+    if(ctrl$verboseIter) cat(wrn, "\n")
+    warning(wrn)
+    rm(wrn)
+    
+    ## setup a dummy results with NA values for all predictions
+    predicted <- lapply(holdoutIndex, function(holdoutIndex) {
       nPred <- length(holdoutIndex)
       if(!is.null(lev))
       {
@@ -140,48 +174,25 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
         for(i in seq(along = predicted)) predicted[[i]] <- tmp
         rm(tmp)
       }
-    }
-  } else {
-    wrn <- paste(colnames(printed[parm,,drop = FALSE]),
-                 printed[parm,,drop = FALSE],
-                 sep = "=",
-                 collapse = ", ")
-    wrn <- paste("model fit failed for ", names(resampleIndex)[iter],
-                 ": ", wrn, " ", as.character(mod), sep = "")
-    if(ctrl$verboseIter) cat(wrn, "\n")
-    warning(wrn)
-    rm(wrn)
-    
-    ## setup a dummy results with NA values for all predictions
-    nPred <- length(holdoutIndex)
-    if(!is.null(lev))
-    {
-      predicted <- rep("", nPred)
-      predicted[seq(along = predicted)] <- NA
-    } else {
-      predicted <- rep(NA, nPred)
-    }
-    if(!is.null(submod))
-    {
-      tmp <- predicted
-      predicted <- vector(mode = "list", length = nrow(info$submodels[[parm]]) + 1)
-      for(i in seq(along = predicted)) predicted[[i]] <- tmp
-      rm(tmp)
-    }
+      
+      predicted
+    })
   }
   
   if(testing) print(head(predicted))
   if(ctrl$classProbs)
   {
+    probIndex <- holdoutIndex[[1]]
+    
     if(class(mod)[1] != "try-error")
     {
       probValues <- probFunction(method = method,
                                  modelFit = mod$fit,
-                                 newdata = x[holdoutIndex,, drop = FALSE],
+                                 newdata = x[probIndex,, drop = FALSE],
                                  preProc = mod$preProc,
                                  param = submod)
     } else {
-      probValues <- as.data.frame(matrix(NA, nrow = nPred, ncol = length(lev)))
+      probValues <- as.data.frame(matrix(NA, nrow = length(probIndex), ncol = length(lev)))
       colnames(probValues) <- lev
       if(!is.null(submod))
       {
@@ -233,32 +244,36 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
     allParam <- allParam[complete.cases(allParam),, drop = FALSE]
     
     ## collate the predicitons across all the sub-models
-    predicted <- lapply(predicted,
-                        function(x, y, wts, lv, rows) {
-                          if(!is.factor(x) & is.character(x)) x <- factor(as.character(x), levels = lv)
-                          out <- data.frame(pred = x, obs = y, stringsAsFactors = FALSE)
-                          if(!is.null(wts)) out$weights <- wts
-                          out$rowIndex <- rows
-                          out
-                        },
-                        y = y[holdoutIndex],
-                        wts = wts[holdoutIndex],
-                        lv = lev,
-                        rows = holdoutIndex)
+    predicted <- mapply(predicted, holdoutIndex, SIMPLIFY = FALSE, USE.NAMES = FALSE,
+                        FUN = function(pred, rows) {
+                          lapply(pred, function(x) {
+                            y <- y[rows]
+                            wts <- wts[rows]
+                            
+                            if(!is.factor(x) & is.character(x)) x <- factor(as.character(x), levels = lev)
+                            out <- data.frame(pred = x, obs = y, stringsAsFactors = FALSE)
+                            if(!is.null(wts)) out$weights <- wts
+                            out$rowIndex <- rows
+                            out
+                          })
+                        })
+    
     if(testing) print(head(predicted))
 
     ## same for the class probabilities
     if(ctrl$classProbs)
     {
-      for(k in seq(along = predicted)) predicted[[k]] <- cbind(predicted[[k]], probValues[[k]])
+      predicted <- lapply(predicted, function(predicted) {
+        for(k in seq(along = predicted)) predicted[[k]] <- cbind(predicted[[k]], probValues[[k]])
+        predicted
+      })
     }
     
     if(keep_pred)
     {
-      tmpPred <- predicted
+      tmpPred <- predicted[[1]]
       for(modIndex in seq(along = tmpPred))
       {
-        tmpPred[[modIndex]]$rowIndex <- holdoutIndex
         tmpPred[[modIndex]] <- merge(tmpPred[[modIndex]], 
                                      allParam[modIndex,,drop = FALSE],
                                      all = TRUE)
@@ -268,50 +283,75 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
     } else tmpPred <- NULL
     
     ## get the performance for this resample for each sub-model
-    thisResample <- lapply(predicted,
-                           ctrl$summaryFunction,
-                           lev = lev,
-                           model = method)
+    thisResample <- lapply(predicted, function(pred) {
+      lapply(pred,
+             ctrl$summaryFunction,
+             lev = lev,
+             model = method)
+    })
+    
+    if(length(thisResample) > 1L) {
+      thisResample[[2]] <- lapply(thisResample[[2]], function(res) {
+        names(res) <- paste0(names(res), "Optimism")
+        res
+      })
+    }
+    
     if(testing) print(head(thisResample))
+    
     ## for classification, add the cell counts
     if(length(lev) > 1)
     {
-      cells <- lapply(predicted,
-                      function(x) flatTable(x$pred, x$obs))
-      for(ind in seq(along = cells)) thisResample[[ind]] <- c(thisResample[[ind]], cells[[ind]])
+      cells <- lapply(predicted[[1]], function(x) flatTable(x$pred, x$obs))
+      for(ind in seq(along = cells)) thisResample[[1]][[ind]] <- c(thisResample[[1]][[ind]], cells[[ind]])
     }
-    thisResample <- do.call("rbind", thisResample)          
+    thisResample <- do.call(cbind, lapply(thisResample, function(x) do.call("rbind", x)))
     thisResample <- cbind(allParam, thisResample)
     
-  } else {       
-    if(is.factor(y)) predicted <- factor(as.character(predicted), levels = lev)
-    tmp <-  data.frame(pred = predicted,
-                       obs = y[holdoutIndex],
-                       stringsAsFactors = FALSE)
-    ## Sometimes the code above does not coerce the first
-    ## columnn to be named "pred" so force it
-    names(tmp)[1] <- "pred"
-    if(!is.null(wts)) tmp$weights <- wts[holdoutIndex]
-    if(ctrl$classProbs) tmp <- cbind(tmp, probValues)
-    tmp$rowIndex <- holdoutIndex
+  } else {
+    tmpPred <- NULL
     
-    if(keep_pred)
-    {
-      tmpPred <- tmp
-      tmpPred$rowIndex <- holdoutIndex
-      tmpPred <- merge(tmpPred, info$loop[parm,,drop = FALSE],
-                       all = TRUE)
-      tmpPred$Resample <- names(resampleIndex)[iter]
-    } else tmpPred <- NULL
-
-    ##################################
+    thisResample <- mapply(predicted, holdoutIndex, SIMPLIFY = FALSE, USE.NAMES = FALSE,
+                           FUN = function(predicted, holdoutIndex) {
+                             if(is.factor(y)) predicted <- factor(as.character(predicted), levels = lev)
+                             tmp <-  data.frame(pred = predicted,
+                                                obs = y[holdoutIndex],
+                                                stringsAsFactors = FALSE)
+                             ## Sometimes the code above does not coerce the first
+                             ## columnn to be named "pred" so force it
+                             names(tmp)[1] <- "pred"
+                             if(!is.null(wts)) tmp$weights <- wts[holdoutIndex]
+                             if(ctrl$classProbs) tmp <- cbind(tmp, probValues)
+                             tmp$rowIndex <- holdoutIndex
+                             
+                             if(keep_pred)
+                             {
+                               tmpPred <- tmp
+                               tmpPred$rowIndex <- holdoutIndex
+                               tmpPred <- merge(tmpPred, info$loop[parm,,drop = FALSE],
+                                                all = TRUE)
+                               tmpPred$Resample <- names(resampleIndex)[iter]
+                               
+                               tmpPred <<- tmpPred
+                             }
+                             
+                             ##################################
+                             
+                             thisResample <- ctrl$summaryFunction(tmp,
+                                                                  lev = lev,
+                                                                  model = method)
+                             
+                             ## if classification, get the confusion matrix
+                             if(length(lev) > 1) thisResample <- c(thisResample, flatTable(tmp$pred, tmp$obs))
+                           })
     
-    thisResample <- ctrl$summaryFunction(tmp,
-                                         lev = lev,
-                                         model = method)
+    if(length(thisResample) > 1L) {
+      thisResample[[2]] <- thisResample[[2]][!grepl("\\.cell", names(thisResample[[2]]))]
+      names(thisResample[[2]]) <- paste0(names(thisResample[[2]]), "Optimism")
+      thisResample <- unlist(thisResample, recursive = FALSE)
+      
+    } else thisResample <- thisResample[[1]]
     
-    ## if classification, get the confusion matrix
-    if(length(lev) > 1) thisResample <- c(thisResample, flatTable(tmp$pred, tmp$obs))
     thisResample <- as.data.frame(t(thisResample))
     thisResample <- cbind(thisResample, info$loop[parm,,drop = FALSE])
     
@@ -324,14 +364,15 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
 }
   
   resamples <- rbind.fill(result[names(result) == "resamples"])
-  pred <- if(keep_pred)  rbind.fill(result[names(result) == "pred"]) else NULL
-  if(ctrl$method %in% c("boot632"))
+  pred <- if(keep_pred) rbind.fill(result[names(result) == "pred"]) else NULL
+  
+  if(grepl("boot632|optimism", ctrl$method, ignore.case = TRUE))
   {
     perfNames <- names(ctrl$summaryFunction(data.frame(obs = y, pred = sample(y), weights = 1),
                                             lev = lev,
                                             model = method))
     apparent <- subset(resamples, Resample == "AllData")
-    apparent <- apparent[,!grepl("^\\.cell|Resample", colnames(apparent)),drop = FALSE]
+    apparent <- apparent[,!grepl("^\\.cell|Resample|Optimism", colnames(apparent)),drop = FALSE]
     names(apparent)[which(names(apparent) %in% perfNames)] <- paste(names(apparent)[which(names(apparent) %in% perfNames)],
                                                                     "Apparent", sep = "")
     names(apparent) <- gsub("^\\.", "", names(apparent))
@@ -362,6 +403,16 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
       const <- 1-exp(-1)
       out[, perfNames[p]] <- (const * out[, perfNames[p]]) +  ((1-const) * out[, paste(perfNames[p],"Apparent", sep = "")])
     }
+  } else if(grepl("optimism", ctrl$method, ignore.case = TRUE)) {
+    out <- merge(out, apparent)
+    sapply(perfNames, function(perfName) {
+      optimism <- (out[ , perfName] - out[ , paste0(perfName, "Optimism")]) / ctrl$number
+      final_estimate <- out[ , paste0(perfName, "Apparent")] + optimism
+      
+      out[ , paste0(perfName, "Optimism")] <<- optimism
+      out[ , perfName] <<- final_estimate
+    })
+    out <- out[ , !grepl("Optimism.*SD", colnames(out), ignore.case = TRUE), drop = FALSE]
   }
   
   list(performance = out, resamples = resamples, predictions = if(keep_pred) pred else NULL)

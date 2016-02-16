@@ -114,8 +114,8 @@ train.default <- function(x, y,
       }
     }         
   } else {
-    if(metric %in% c("Accuracy", "Kappa")) 
-      stop(paste("Metric", metric, "not applicable for regression models"))         
+    if(metric %in% c("Accuracy", "Kappa"))
+      stop(paste("Metric", metric, "not applicable for regression models"))
     classLevels <- NA
     if(trControl$classProbs) {
       warning("cannnot compute class probabilities for regression")
@@ -139,7 +139,8 @@ train.default <- function(x, y,
                               alt_cv =, cv = createFolds(y, trControl$number, returnTrain = TRUE),
                               repeatedcv =, adaptive_cv = createMultiFolds(y, trControl$number, trControl$repeats),
                               loocv = createFolds(y, n, returnTrain = TRUE),
-                              boot =, boot632 =,  adaptive_boot = createResample(y, trControl$number),
+                              boot =, boot632 =, optimism_boot =, 
+                              adaptive_boot = createResample(y, trControl$number),
                               test = createDataPartition(y, 1, trControl$p),
                               adaptive_lgocv =, lgocv = createDataPartition(y, trControl$number, trControl$p),
                               timeslice = createTimeSlices(seq(along = y),
@@ -172,12 +173,15 @@ train.default <- function(x, y,
   }
   
   ## Create hold--out indicies
-  if(is.null(trControl$indexOut) & trControl$method != "oob"){
-    if(tolower(trControl$method) != "timeslice") {     
+  if(is.null(trControl$indexOut) && trControl$method != "oob"){
+    if(tolower(trControl$method) != "timeslice") {
       y_index <- if(class(y)[1] == "Surv") 1:nrow(y) else seq(along = y)
-      trControl$indexOut <- lapply(trControl$index,
-                                   function(training, allSamples) allSamples[-unique(training)],
-                                   allSamples = y_index)
+      trControl$indexOut <- lapply(trControl$index, function(training) {
+        if(grepl("optimism", trControl$method))
+          list(origIndex = y_index, bootIndex = training)
+        else
+          setdiff(y_index, training)
+      })
       names(trControl$indexOut) <- prettySeq(trControl$indexOut)
     } else {
       trControl$indexOut <- createTimeSlices(seq(along = y),
@@ -187,9 +191,8 @@ train.default <- function(x, y,
     }
   }
   
-  if(trControl$method != "oob" & is.null(trControl$index)) names(trControl$index) <- prettySeq(trControl$index)
-  if(trControl$method != "oob" & is.null(names(trControl$index)))    names(trControl$index)    <- prettySeq(trControl$index)
-  if(trControl$method != "oob" & is.null(names(trControl$indexOut))) names(trControl$indexOut) <- prettySeq(trControl$indexOut)
+  if(trControl$method != "oob" && is.null(names(trControl$index)))    names(trControl$index)    <- prettySeq(trControl$index)
+  if(trControl$method != "oob" && is.null(names(trControl$indexOut))) names(trControl$indexOut) <- prettySeq(trControl$indexOut)
   
   ## Gather all the pre-processing info. We will need it to pass into the grid creation
   ## code so that there is a concordance between the data used for modeling and grid creation
@@ -330,7 +333,7 @@ train.default <- function(x, y,
     
     
     num_rs <- length(trControl$index)
-    if(trControl$method == "boot632") num_rs <- num_rs + 1L
+    if(isTRUE(grepl("boot632|optimism", trControl$method))) num_rs <- num_rs + 1L
     ## Set or check the seeds when needed
     if(is.null(trControl$seeds) || all(is.na(trControl$seeds)))  {
       seeds <- sample.int(n = 1000000L, size = num_rs * nrow(trainInfo$loop) + 1L)
@@ -378,6 +381,10 @@ train.default <- function(x, y,
                     " will be used instead.",
                     sep = ""))
     }
+    
+    if(grepl("optimism", trControl$method)) {
+      if(trControl$classProbs) warning("Optimism bootstrap is not suitable for class probabilities")
+    } 
     
     if(trControl$method == "oob"){
       tmp <- oobTrainWorkflow(x = x, y = y, wts = weights, 
