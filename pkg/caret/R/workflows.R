@@ -313,6 +313,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
     
   } else {
     tmpPred <- NULL
+    tmp0 <- holdoutIndex[[1]]
     
     thisResample <- mapply(predicted, holdoutIndex, SIMPLIFY = FALSE, USE.NAMES = FALSE,
                            FUN = function(predicted, holdoutIndex) {
@@ -326,6 +327,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
                              if(!is.null(wts)) tmp$weights <- wts[holdoutIndex]
                              if(ctrl$classProbs && nrow(tmp) == nrow(probValues)) tmp <- cbind(tmp, probValues)
                              tmp$rowIndex <- holdoutIndex
+                             if(nrow(tmp) == length(tmp0)) tmp0 <<- tmp
                              
                              if(keep_pred)
                              {
@@ -347,6 +349,8 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
                              ## if classification, get the confusion matrix
                              if(length(lev) > 1) thisResample <- c(thisResample, flatTable(tmp$pred, tmp$obs))
                            })
+    
+    tmp <- tmp0
     
     if(length(thisResample) > 1L) {
       thisResample[[2]] <- thisResample[[2]][!grepl("\\.cell", names(thisResample[[2]]))]
