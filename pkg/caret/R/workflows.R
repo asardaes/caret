@@ -61,6 +61,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
   }
   `%op%` <- getOper(ctrl$allowParallel && getDoParWorkers() > 1)
   keep_pred <- isTRUE(ctrl$savePredictions) || ctrl$savePredictions %in% c("all", "final")
+  if(ctrl$method %in% c("boot632, LOOB") && !keep_pred) stop("LOOB and boot632 need predictions to be saved ('savePredictions')")
   pkgs <- c("methods", "caret")
   if(!is.null(method$library)) pkgs <- c(pkgs, method$library)
   
@@ -372,7 +373,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
   resamples <- rbind.fill(result[names(result) == "resamples"])
   pred <- if(keep_pred) rbind.fill(result[names(result) == "pred"]) else NULL
   
-  if(grepl("boot632|optimism", ctrl$method, ignore.case = TRUE))
+  if(grepl("boot632|optimism|LOOB", ctrl$method, ignore.case = TRUE))
   {
     perfNames <- names(ctrl$summaryFunction(data.frame(obs = y, pred = sample(y), weights = 1),
                                             lev = lev,
@@ -387,6 +388,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
       warning("There were missing values in the apparent performance measures.")
     }        
     resamples <- subset(resamples, Resample != "AllData")
+    pred <- subset(pred, Resample != "AllData")
   }
   names(resamples) <- gsub("^\\.", "", names(resamples))
   
@@ -401,13 +403,29 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
                MeanSD, 
                exclude = gsub("^\\.", "", colnames(info$loop)))
   
-  if(ctrl$method %in% c("boot632"))
+  if(ctrl$method %in% c("boot632", "LOOB"))
   {
-    out <- merge(out, apparent)
-    for(p in seq(along = perfNames))
-    {
-      const <- 1-exp(-1)
-      out[, perfNames[p]] <- (const * out[, perfNames[p]]) +  ((1-const) * out[, paste(perfNames[p],"Apparent", sep = "")])
+    Err1 <- lapply(split.data.frame(pred,
+                                    f = as.list(pred[ , 
+                                                      colnames(pred) %in% c("rowIndex", colnames(info$loop)), 
+                                                      drop = FALSE])),
+                   function(df) {
+                     perf <- ctrl$summaryFunction(df, lev = lev, model = method)
+                     cbind(as.data.frame(rbind(perf)), df[1L, colnames(df) %in% colnames(info$loop), drop = FALSE])
+                   })
+    Err1 <- do.call(rbind, Err1)
+    Err1 <- stats::aggregate(Err1[ , !(colnames(Err1) %in% colnames(info$loop)), drop = FALSE],
+                             by = as.list(Err1[ , colnames(Err1) %in% colnames(info$loop), drop = FALSE]),
+                             FUN = mean)
+    
+    out <- merge(out[ , !(colnames(out) %in% perfNames), drop = FALSE], Err1)
+    
+    if(ctrl$method == "boot632") {
+      out <- merge(out, apparent)
+      const <- 1 - exp(-1)
+      sapply(perfNames, function(perfName) {
+        out[, perfName] <<- (const * out[, perfName]) +  ((1-const) * out[, paste(perfName, "Apparent", sep = "")])
+      })
     }
   } else if(grepl("optimism", ctrl$method, ignore.case = TRUE)) {
     out <- merge(out, apparent)

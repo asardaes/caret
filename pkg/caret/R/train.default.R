@@ -139,7 +139,7 @@ train.default <- function(x, y,
                               alt_cv =, cv = createFolds(y, trControl$number, returnTrain = TRUE),
                               repeatedcv =, adaptive_cv = createMultiFolds(y, trControl$number, trControl$repeats),
                               loocv = createFolds(y, n, returnTrain = TRUE),
-                              boot =, boot632 =, optimism_boot =, 
+                              boot =, boot632 =, optimism_boot =, loob =,
                               adaptive_boot = createResample(y, trControl$number),
                               test = createDataPartition(y, 1, trControl$p),
                               adaptive_lgocv =, lgocv = createDataPartition(y, trControl$number, trControl$p),
@@ -172,7 +172,7 @@ train.default <- function(x, y,
        stop('`savePredictions` should be either logical or "all", "final" or "none"')
   }
   
-  ## Create hold--out indicies
+  ## Create hold--out indices
   if(is.null(trControl$indexOut) && trControl$method != "oob"){
     if(tolower(trControl$method) != "timeslice") {
       y_index <- if(class(y)[1] == "Surv") 1:nrow(y) else seq(along = y)
