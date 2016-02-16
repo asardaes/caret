@@ -61,7 +61,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
   }
   `%op%` <- getOper(ctrl$allowParallel && getDoParWorkers() > 1)
   keep_pred <- isTRUE(ctrl$savePredictions) || ctrl$savePredictions %in% c("all", "final")
-  if(ctrl$method %in% c("boot632, LOOB") && !keep_pred) stop("LOOB and boot632 need predictions to be saved ('savePredictions')")
+  if(ctrl$method %in% c("LOOB") && !keep_pred) stop("LOOB needs predictions to be saved ('savePredictions' parameter)")
   pkgs <- c("methods", "caret")
   if(!is.null(method$library)) pkgs <- c(pkgs, method$library)
   
@@ -392,7 +392,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
       warning("There were missing values in the apparent performance measures.")
     }        
     resamples <- subset(resamples, Resample != "AllData")
-    pred <- subset(pred, Resample != "AllData")
+    if(!is.null(pred)) pred <- subset(pred, Resample != "AllData")
   }
   names(resamples) <- gsub("^\\.", "", names(resamples))
   
@@ -409,21 +409,26 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
   
   if(ctrl$method %in% c("boot632", "LOOB"))
   {
-    Err1 <- lapply(split.data.frame(pred,
-                                    f = as.list(pred[ , 
-                                                      colnames(pred) %in% c("rowIndex", colnames(info$loop)), 
-                                                      drop = FALSE])),
-                   function(df) {
-                     perf <- ctrl$summaryFunction(df, lev = lev, model = method)
-                     cbind(as.data.frame(rbind(perf)), df[1L, colnames(df) %in% colnames(info$loop), drop = FALSE])
-                   })
-    Err1 <- do.call(rbind, Err1)
-    Err1 <- stats::aggregate(Err1[ , !(colnames(Err1) %in% colnames(info$loop)), drop = FALSE],
-                             by = as.list(Err1[ , colnames(Err1) %in% colnames(info$loop), drop = FALSE]),
-                             FUN = mean)
+    if(keep_pred) {
+      # If predictions are available, calculate LOOB first and then use that for boot632
+      Err1 <- lapply(split.data.frame(pred,
+                                      f = as.list(pred[ , 
+                                                        colnames(pred) %in% c("rowIndex", colnames(info$loop)), 
+                                                        drop = FALSE])),
+                     function(df) {
+                       perf <- ctrl$summaryFunction(df, lev = lev, model = method)
+                       cbind(as.data.frame(rbind(perf)), df[1L, colnames(df) %in% colnames(info$loop), drop = FALSE])
+                     })
+      Err1 <- do.call(rbind, Err1)
+      Err1 <- stats::aggregate(Err1[ , !(colnames(Err1) %in% colnames(info$loop)), drop = FALSE],
+                               by = as.list(Err1[ , colnames(Err1) %in% colnames(info$loop), drop = FALSE]),
+                               FUN = mean)
+      
+      out <- merge(out[ , !(colnames(out) %in% perfNames), drop = FALSE], Err1)
+    }
     
-    out <- merge(out[ , !(colnames(out) %in% perfNames), drop = FALSE], Err1)
-    
+    # If predictions are unavailable, just use the bootstrap estimate, variation shouldn't be too big if
+    # enough repliactions were made
     if(ctrl$method == "boot632") {
       out <- merge(out, apparent)
       const <- 1 - exp(-1)
