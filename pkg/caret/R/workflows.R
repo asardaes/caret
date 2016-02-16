@@ -263,10 +263,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
     ## same for the class probabilities
     if(ctrl$classProbs)
     {
-      predicted <- lapply(predicted, function(predicted) {
-        for(k in seq(along = predicted)) predicted[[k]] <- cbind(predicted[[k]], probValues[[k]])
-        predicted
-      })
+      for(k in seq(along = predicted[[1]])) predicted[[1]][[k]] <- cbind(predicted[[1]][[k]], probValues[[k]])
     }
     
     if(keep_pred)
@@ -292,7 +289,12 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
     
     if(length(thisResample) > 1L) {
       thisResample[[2]] <- lapply(thisResample[[2]], function(res) {
-        names(res) <- paste0(names(res), "Optimism")
+        names(res) <- paste0(names(res), "Orig")
+        res
+      })
+      
+      thisResample[[3]] <- lapply(thisResample[[3]], function(res) {
+        names(res) <- paste0(names(res), "Boot")
         res
       })
     }
@@ -321,7 +323,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
                              ## columnn to be named "pred" so force it
                              names(tmp)[1] <- "pred"
                              if(!is.null(wts)) tmp$weights <- wts[holdoutIndex]
-                             if(ctrl$classProbs) tmp <- cbind(tmp, probValues)
+                             if(ctrl$classProbs && nrow(tmp) == nrow(probValues)) tmp <- cbind(tmp, probValues)
                              tmp$rowIndex <- holdoutIndex
                              
                              if(keep_pred)
@@ -347,7 +349,11 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
     
     if(length(thisResample) > 1L) {
       thisResample[[2]] <- thisResample[[2]][!grepl("\\.cell", names(thisResample[[2]]))]
-      names(thisResample[[2]]) <- paste0(names(thisResample[[2]]), "Optimism")
+      thisResample[[3]] <- thisResample[[3]][!grepl("\\.cell", names(thisResample[[3]]))]
+      
+      names(thisResample[[2]]) <- paste0(names(thisResample[[2]]), "Orig")
+      names(thisResample[[3]]) <- paste0(names(thisResample[[3]]), "Boot")
+      
       thisResample <- unlist(thisResample, recursive = FALSE)
       
     } else thisResample <- thisResample[[1]]
@@ -372,7 +378,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
                                             lev = lev,
                                             model = method))
     apparent <- subset(resamples, Resample == "AllData")
-    apparent <- apparent[,!grepl("^\\.cell|Resample|Optimism", colnames(apparent)),drop = FALSE]
+    apparent <- apparent[,!grepl("^\\.cell|Resample|Orig$|Boot$", colnames(apparent)),drop = FALSE]
     names(apparent)[which(names(apparent) %in% perfNames)] <- paste(names(apparent)[which(names(apparent) %in% perfNames)],
                                                                     "Apparent", sep = "")
     names(apparent) <- gsub("^\\.", "", names(apparent))
@@ -406,13 +412,21 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
   } else if(grepl("optimism", ctrl$method, ignore.case = TRUE)) {
     out <- merge(out, apparent)
     sapply(perfNames, function(perfName) {
-      optimism <- (out[ , perfName] - out[ , paste0(perfName, "Optimism")]) / ctrl$number
+      optimism <- (out[ , paste0(perfName, "Orig")] - out[ , paste0(perfName, "Boot")]) / ctrl$number
       final_estimate <- out[ , paste0(perfName, "Apparent")] + optimism
       
+      # Remove unnecessary values
+      resamples[ , paste0(perfName, "Orig")] <<- NULL
+      resamples[ , paste0(perfName, "Boot")] <<- NULL
+      out[ , paste0(perfName, "Orig")] <<- NULL
+      out[ , paste0(perfName, "Boot")] <<- NULL
+      
+      # Update estimates
       out[ , paste0(perfName, "Optimism")] <<- optimism
       out[ , perfName] <<- final_estimate
     })
-    out <- out[ , !grepl("Optimism.*SD", colnames(out), ignore.case = TRUE), drop = FALSE]
+    # Remove unnecessary SD columns
+    out <- out[ , !grepl("(Orig|Boot)SD$", colnames(out), ignore.case = TRUE), drop = FALSE]
   }
   
   list(performance = out, resamples = resamples, predictions = if(keep_pred) pred else NULL)

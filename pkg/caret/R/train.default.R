@@ -178,7 +178,7 @@ train.default <- function(x, y,
       y_index <- if(class(y)[1] == "Surv") 1:nrow(y) else seq(along = y)
       trControl$indexOut <- lapply(trControl$index, function(training) {
         if(grepl("optimism", trControl$method))
-          list(origIndex = y_index, bootIndex = training)
+          list(holdoutIndex = setdiff(y_index, training), origIndex = y_index, bootIndex = training)
         else
           setdiff(y_index, training)
       })
@@ -381,10 +381,6 @@ train.default <- function(x, y,
                     " will be used instead.",
                     sep = ""))
     }
-    
-    if(grepl("optimism", trControl$method)) {
-      if(trControl$classProbs) warning("Optimism bootstrap is not suitable for class probabilities")
-    } 
     
     if(trControl$method == "oob"){
       tmp <- oobTrainWorkflow(x = x, y = y, wts = weights, 
