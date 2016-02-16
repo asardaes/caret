@@ -267,7 +267,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
       for(k in seq(along = predicted[[1]])) predicted[[1]][[k]] <- cbind(predicted[[1]][[k]], probValues[[k]])
     }
     
-    if(keep_pred)
+    if(keep_pred  || (ctrl$method == "boot632plus" && names(resampleIndex)[iter] == "AllData"))
     {
       tmpPred <- predicted[[1]]
       for(modIndex in seq(along = tmpPred))
@@ -329,7 +329,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
                              tmp$rowIndex <- holdoutIndex
                              if(nrow(tmp) == length(tmp0)) tmp0 <<- tmp
                              
-                             if(keep_pred)
+                             if(keep_pred || (ctrl$method == "boot632plus" && names(resampleIndex)[iter] == "AllData"))
                              {
                                tmpPred <- tmp
                                tmpPred$rowIndex <- holdoutIndex
@@ -375,7 +375,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
 }
   
   resamples <- rbind.fill(result[names(result) == "resamples"])
-  pred <- if(keep_pred) rbind.fill(result[names(result) == "pred"]) else NULL
+  pred <- rbind.fill(result[names(result) == "pred"])
   
   if(grepl("boot632|optimism|LOOB", ctrl$method, ignore.case = TRUE))
   {
@@ -392,7 +392,10 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
       warning("There were missing values in the apparent performance measures.")
     }        
     resamples <- subset(resamples, Resample != "AllData")
-    if(!is.null(pred)) pred <- subset(pred, Resample != "AllData")
+    if(!is.null(pred)) {
+      predHat <- subset(pred, Resample == "AllData")
+      pred <- subset(pred, Resample != "AllData")
+    }
   }
   names(resamples) <- gsub("^\\.", "", names(resamples))
   
@@ -407,7 +410,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
                MeanSD, 
                exclude = gsub("^\\.", "", colnames(info$loop)))
   
-  if(ctrl$method %in% c("boot632", "LOOB"))
+  if(ctrl$method %in% c("boot632", "LOOB", "boot632plus"))
   {
     if(keep_pred) {
       # If predictions are available, calculate LOOB first and then use that for boot632
@@ -435,6 +438,39 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
       sapply(perfNames, function(perfName) {
         out[, perfName] <<- (const * out[, perfName]) +  ((1-const) * out[, paste(perfName, "Apparent", sep = "")])
       })
+    } else if(ctrl$method == "boot632plus") {
+      out <- merge(out, apparent)
+      const <- 1 - exp(-1)
+      predHat <- split.data.frame(predHat, f = as.list(predHat[ , colnames(pred) %in% colnames(info$loop), drop = FALSE]))
+      
+      gammaHat <- lapply(predHat, function(df) {
+        gam <- sum(sapply(lev, function(lv) { mean(df$obs == lv) * (1 - mean(df$pred == lv)) }))
+        data.frame(df[1L, colnames(df) %in% colnames(info$loop), drop = FALSE], gammaHat = gam)
+      })
+      
+      gammaHat <- do.call(rbind, gammaHat)
+      out <- merge(out, gammaHat)
+      
+      sapply(1:nrow(out), function(idRow) {
+        # It would be more precise to use Error Rate instead of Accuracy, but this should be close enough...
+        Err1 <- 1 - out[idRow, "Accuracy"]
+        gammaHat <- out[idRow, "gammaHat"]
+        errBar <- 1 - out[idRow, "AccuracyApparent"]
+        
+        Err1prime <- min(Err1, gammaHat)
+        
+        Rprime <- 0
+        if(Err1 > errBar && gammaHat > errBar) {
+          Rprime <- (Err1 - errBar) / (gammaHat - errBar)
+          if(ctrl$verboseIter) cat("In 0.632+: R' = ", Rprime, "\n", sep = "")
+        }
+        
+        Err632 <- (1-const) * errBar + const * Err1
+        
+        out[idRow, "Accuracy"] <<- 1 - (Err632 + (Err1prime - errBar) * ((const*(1-const)*Rprime) / (1 - (1-const)*Rprime)))
+      })
+      
+      out$gammaHat <- NULL
     }
   } else if(grepl("optimism", ctrl$method, ignore.case = TRUE)) {
     out <- merge(out, apparent)

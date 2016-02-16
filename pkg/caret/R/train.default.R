@@ -139,7 +139,7 @@ train.default <- function(x, y,
                               alt_cv =, cv = createFolds(y, trControl$number, returnTrain = TRUE),
                               repeatedcv =, adaptive_cv = createMultiFolds(y, trControl$number, trControl$repeats),
                               loocv = createFolds(y, n, returnTrain = TRUE),
-                              boot =, boot632 =, optimism_boot =, loob =,
+                              boot =, boot632 =, optimism_boot =, loob =, boot632plus =,
                               adaptive_boot = createResample(y, trControl$number),
                               test = createDataPartition(y, 1, trControl$p),
                               adaptive_lgocv =, lgocv = createDataPartition(y, trControl$number, trControl$p),
@@ -381,6 +381,9 @@ train.default <- function(x, y,
                     " will be used instead.",
                     sep = ""))
     }
+    
+    if(trControl$method == "boot632plus" && metric != "Accuracy")
+      stop("The boot632plus method is only defined for classification Accuracy")
     
     if(trControl$method == "oob"){
       tmp <- oobTrainWorkflow(x = x, y = y, wts = weights, 
