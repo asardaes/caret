@@ -54,7 +54,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
   ## fitting and predicting the full data set.
   
   resampleIndex <- ctrl$index
-  if(isTRUE(grepl("boot632|optimism", ctrl$method)))
+  if(isTRUE(grepl("boot632|optimism|boot_all", ctrl$method)))
   {
     resampleIndex <- c(list("AllData" = rep(0, nrow(x))), resampleIndex)
     ctrl$indexOut <- c(list("AllData" = rep(0, nrow(x))),  ctrl$indexOut)
@@ -105,7 +105,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
   
   if(class(mod)[1] != "try-error")
   {
-    if(!grepl("optimism", ctrl$method) || names(resampleIndex)[iter] == "AllData") holdoutIndex <- list(holdoutIndex)
+    if(!grepl("optimism|boot_all", ctrl$method) || names(resampleIndex)[iter] == "AllData") holdoutIndex <- list(holdoutIndex)
     predicted <- lapply(holdoutIndex, function(holdoutIndex) {
       predicted <- try(
         predictionFunction(method = method,
@@ -267,7 +267,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
       for(k in seq(along = predicted[[1]])) predicted[[1]][[k]] <- cbind(predicted[[1]][[k]], probValues[[k]])
     }
     
-    if(keep_pred  || (ctrl$method == "boot632plus" && names(resampleIndex)[iter] == "AllData"))
+    if(keep_pred  || (ctrl$method %in% c("boot632plus", "boot_all") && names(resampleIndex)[iter] == "AllData"))
     {
       tmpPred <- predicted[[1]]
       for(modIndex in seq(along = tmpPred))
@@ -329,7 +329,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
                              tmp$rowIndex <- holdoutIndex
                              if(nrow(tmp) == length(tmp0)) tmp0 <<- tmp
                              
-                             if(keep_pred || (ctrl$method == "boot632plus" && names(resampleIndex)[iter] == "AllData"))
+                             if(keep_pred || (ctrl$method %in% c("boot632plus", "boot_all") && names(resampleIndex)[iter] == "AllData"))
                              {
                                tmpPred <- tmp
                                tmpPred$rowIndex <- holdoutIndex
@@ -371,7 +371,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
   
   # Transform accuracy to error rate, will be transformed back in the end
   accCols <- grepl("accuracy", colnames(thisResample), ignore.case = TRUE)
-  thisResample[ , accCols] <- 1 - thisResample[ , accCols]
+  if(any(accCols)) thisResample[ , accCols] <- 1 - thisResample[ , accCols]
   
   if(ctrl$verboseIter) progress(printed[parm,,drop = FALSE],
                                 names(resampleIndex), iter, FALSE)
@@ -381,7 +381,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
   resamples <- rbind.fill(result[names(result) == "resamples"])
   pred <- rbind.fill(result[names(result) == "pred"])
   
-  if(grepl("boot632|optimism|LOOB", ctrl$method, ignore.case = TRUE))
+  if(grepl("boot632|optimism|LOOB|boot_all", ctrl$method, ignore.case = TRUE))
   {
     perfNames <- names(ctrl$summaryFunction(data.frame(obs = y, pred = sample(y), weights = 1),
                                             lev = lev,
@@ -401,6 +401,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
       pred <- subset(pred, Resample != "AllData")
     }
   }
+  
   names(resamples) <- gsub("^\\.", "", names(resamples))
   
   if(any(!complete.cases(resamples[,!grepl("^cell|Resample", colnames(resamples)),drop = FALSE])))
@@ -414,16 +415,21 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
                MeanSD, 
                exclude = gsub("^\\.", "", colnames(info$loop)))
   
-  if(ctrl$method %in% c("boot632", "LOOB", "boot632plus"))
+  if(ctrl$method %in% c("boot632", "LOOB", "boot632plus", "boot_all"))
   {
-    if(keep_pred) {
+    use_LOOB <- FALSE
+    
+    if(keep_pred && get_model_type(y) == "Classification") {
       # If predictions are available, calculate LOOB first and then use that for boot632
+      use_LOOB <- TRUE
+      
       Err1 <- lapply(split.data.frame(pred,
                                       f = as.list(pred[ , 
                                                         colnames(pred) %in% c("rowIndex", colnames(info$loop)), 
                                                         drop = FALSE])),
                      function(df) {
                        perf <- ctrl$summaryFunction(df, lev = lev, model = method)
+                       if(any(names(perf) == "Accuracy")) perf["Accuracy"] <- 1 - perf["Accuracy"]
                        cbind(as.data.frame(rbind(perf)), df[1L, colnames(df) %in% colnames(info$loop), drop = FALSE])
                      })
       Err1 <- do.call(rbind, Err1)
@@ -431,18 +437,30 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
                                by = as.list(Err1[ , colnames(Err1) %in% colnames(info$loop), drop = FALSE]),
                                FUN = mean)
       
-      out <- merge(out[ , !(colnames(out) %in% perfNames), drop = FALSE], Err1)
+      if(ctrl$method == "boot_all") {
+        idLoob <- !(colnames(Err1) %in% colnames(info$loop))
+        colnames(Err1)[idLoob] <- paste0(colnames(Err1)[idLoob], "_LOOB")
+        out <- merge(out, Err1)
+        
+      } else
+        out <- merge(out[ , !(colnames(out) %in% perfNames), drop = FALSE], Err1)
     }
     
     # If predictions are unavailable, just use the bootstrap estimate, variation shouldn't be too big if
     # enough repliactions were made
-    if(ctrl$method == "boot632") {
+    if(ctrl$method %in% c("boot632", "boot_all")) {
       out <- merge(out, apparent)
       const <- 1 - exp(-1)
       sapply(perfNames, function(perfName) {
-        out[, perfName] <<- (const * out[, perfName]) +  ((1-const) * out[, paste(perfName, "Apparent", sep = "")])
+        perfIn <- if(use_LOOB) paste0(perfName, "_LOOB") else perfName
+        perfOut <- if(ctrl$method == "boot_all") paste0(perfName, "_632") else perfName
+        out[, perfOut] <<- (const * out[, perfIn]) +  ((1-const) * out[, paste(perfName, "Apparent", sep = "")])
+        NULL
       })
-    } else if(ctrl$method == "boot632plus") {
+      
+    }
+    
+    if(ctrl$method %in% c("boot632plus", "boot_all") && any(grepl("accuracy", colnames(out), ignore.case = TRUE))) {
       out <- merge(out, apparent)
       const <- 1 - exp(-1)
       predHat <- split.data.frame(predHat, f = as.list(predHat[ , colnames(pred) %in% colnames(info$loop), drop = FALSE]))
@@ -456,7 +474,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
       out <- merge(out, gammaHat)
       
       sapply(1:nrow(out), function(idRow) {
-        Err1 <- out[idRow, "Accuracy"]
+        Err1 <- if(use_LOOB) out[idRow, "Accuracy_LOOB"] else out[idRow, "Accuracy"]
         gammaHat <- out[idRow, "gammaHat"]
         errBar <- out[idRow, "AccuracyApparent"]
         
@@ -470,12 +488,16 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
         
         Err632 <- (1-const) * errBar + const * Err1
         
-        out[idRow, "Accuracy"] <<- Err632 + (Err1prime - errBar) * ((const*(1-const)*Rprime) / (1 - (1-const)*Rprime))
+        perfOut <- if(ctrl$method == "boot_all") "Accuracy_632plus" else "Accuracy"
+        out[idRow, perfOut] <<- Err632 + (Err1prime - errBar) * ((const*(1-const)*Rprime) / (1 - (1-const)*Rprime))
+        NULL
       })
       
       out$gammaHat <- NULL
     }
-  } else if(grepl("optimism", ctrl$method, ignore.case = TRUE)) {
+  }
+  
+  if(grepl("optimism|boot_all", ctrl$method, ignore.case = TRUE)) {
     out <- merge(out, apparent)
     sapply(perfNames, function(perfName) {
       optimism <- (out[ , paste0(perfName, "Orig")] - out[ , paste0(perfName, "Boot")]) / ctrl$number
@@ -487,9 +509,12 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
       out[ , paste0(perfName, "Orig")] <<- NULL
       out[ , paste0(perfName, "Boot")] <<- NULL
       
+      perfOut <- if(ctrl$method == "boot_all") paste0(perfName, "_OptBoot") else perfName
+      
       # Update estimates
       out[ , paste0(perfName, "Optimism")] <<- optimism
-      out[ , perfName] <<- final_estimate
+      out[ , perfOut] <<- final_estimate
+      NULL
     })
     # Remove unnecessary SD columns
     out <- out[ , !grepl("(Orig|Boot)SD$", colnames(out), ignore.case = TRUE), drop = FALSE]
@@ -497,8 +522,9 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
   
   # transform error rate back to accuracy
   if(any(grepl("accuracy", colnames(out), ignore.case = TRUE))) {
-    accCols <- grep("accuracy(?!.*SD$)", colnames(out), ignore.case = TRUE, perl = TRUE)
+    accCols <- grep("accuracy(?!.*(SD|Optimism)$)", colnames(out), ignore.case = TRUE, perl = TRUE)
     out[ , accCols] <- 1 - out[ , accCols]
+    out[ , "AccuracyOptimism"] <- -out[ , "AccuracyOptimism"]
   }
   
   list(performance = out, resamples = resamples, predictions = if(keep_pred) pred else NULL)

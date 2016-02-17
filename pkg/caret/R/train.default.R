@@ -120,7 +120,9 @@ train.default <- function(x, y,
     if(trControl$classProbs) {
       warning("cannnot compute class probabilities for regression")
       trControl$classProbs <- FALSE
-    }   
+    }
+    if(trControl$method == "LOOB")
+      stop("LOOB resampling is only implemented for classification")
   }
   
   
@@ -139,7 +141,7 @@ train.default <- function(x, y,
                               alt_cv =, cv = createFolds(y, trControl$number, returnTrain = TRUE),
                               repeatedcv =, adaptive_cv = createMultiFolds(y, trControl$number, trControl$repeats),
                               loocv = createFolds(y, n, returnTrain = TRUE),
-                              boot =, boot632 =, optimism_boot =, loob =, boot632plus =,
+                              boot =, boot632 =, optimism_boot =, loob =, boot632plus =, boot_all =,
                               adaptive_boot = createResample(y, trControl$number),
                               test = createDataPartition(y, 1, trControl$p),
                               adaptive_lgocv =, lgocv = createDataPartition(y, trControl$number, trControl$p),
@@ -177,7 +179,7 @@ train.default <- function(x, y,
     if(tolower(trControl$method) != "timeslice") {
       y_index <- if(class(y)[1] == "Surv") 1:nrow(y) else seq(along = y)
       trControl$indexOut <- lapply(trControl$index, function(training) {
-        if(grepl("optimism", trControl$method))
+        if(grepl("optimism|boot_all", trControl$method))
           list(holdoutIndex = setdiff(y_index, training), origIndex = y_index, bootIndex = training)
         else
           setdiff(y_index, training)
@@ -333,7 +335,7 @@ train.default <- function(x, y,
     
     
     num_rs <- length(trControl$index)
-    if(isTRUE(grepl("boot632|optimism", trControl$method))) num_rs <- num_rs + 1L
+    if(isTRUE(grepl("boot632|optimism|boot_all", trControl$method))) num_rs <- num_rs + 1L
     ## Set or check the seeds when needed
     if(is.null(trControl$seeds) || all(is.na(trControl$seeds)))  {
       seeds <- sample.int(n = 1000000L, size = num_rs * nrow(trainInfo$loop) + 1L)
@@ -383,7 +385,7 @@ train.default <- function(x, y,
     }
     
     if(trControl$method == "boot632plus" && metric != "Accuracy")
-      stop("The boot632plus method is only defined for classification Accuracy")
+      stop("The boot632plus method is only implemented for classification Accuracy")
     
     if(trControl$method == "oob"){
       tmp <- oobTrainWorkflow(x = x, y = y, wts = weights, 
