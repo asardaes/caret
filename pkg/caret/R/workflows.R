@@ -120,16 +120,6 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
   printed <- format(info$loop, digits = 4)
   colnames(printed) <- gsub("^\\.", "", colnames(printed))
   
-  ## For 632 estimator, add an element to the index of zeros to trick it into
-  ## fitting and predicting the full data set.
-  
-  resampleIndex <- ctrl$index
-  if(ctrl$method %in% c("boot632"))
-  {
-    resampleIndex <- c(list("AllData" = rep(0, nrow(x))), resampleIndex)
-    ctrl$indexOut <- c(list("AllData" = rep(0, nrow(x))),  ctrl$indexOut)
-  }
-  
   ## for confidence intervals
   if(!is.null(ctrl$confLevel)) {
     ctrl$confType <- match.arg(ctrl$confType, c("norm", "basic", "perc", "bca", "L", "both"))
@@ -165,6 +155,16 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
         b_in <- b_in[-21L]
       }
     }
+  }
+  
+  ## For 632 estimator, add an element to the index of zeros to trick it into
+  ## fitting and predicting the full data set.
+  
+  resampleIndex <- ctrl$index
+  if(ctrl$method %in% c("boot632"))
+  {
+    resampleIndex <- c(list("AllData" = rep(0, nrow(x))), resampleIndex)
+    ctrl$indexOut <- c(list("AllData" = rep(0, nrow(x))),  ctrl$indexOut)
   }
   
   `%op%` <- getOper(ctrl$allowParallel && getDoParWorkers() > 1)
