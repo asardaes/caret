@@ -114,13 +114,15 @@ train.default <- function(x, y,
       }
     }         
   } else {
-    if(metric %in% c("Accuracy", "Kappa")) 
-      stop(paste("Metric", metric, "not applicable for regression models"))         
+    if(metric %in% c("Accuracy", "Kappa"))
+      stop(paste("Metric", metric, "not applicable for regression models"))
     classLevels <- NA
     if(trControl$classProbs) {
       warning("cannnot compute class probabilities for regression")
       trControl$classProbs <- FALSE
-    }   
+    }
+    if(trControl$method == "LOOB")
+      stop("LOOB resampling is only implemented for classification")
   }
   
   
@@ -139,7 +141,8 @@ train.default <- function(x, y,
                               alt_cv =, cv = createFolds(y, trControl$number, returnTrain = TRUE),
                               repeatedcv =, adaptive_cv = createMultiFolds(y, trControl$number, trControl$repeats),
                               loocv = createFolds(y, n, returnTrain = TRUE),
-                              boot =, boot632 =,  adaptive_boot = createResample(y, trControl$number),
+                              boot =, boot632 =, optimism_boot =, loob =, boot632plus =, boot_all =,
+                              adaptive_boot = createResample(y, trControl$number),
                               test = createDataPartition(y, 1, trControl$p),
                               adaptive_lgocv =, lgocv = createDataPartition(y, trControl$number, trControl$p),
                               timeslice = createTimeSlices(seq(along = y),
@@ -171,13 +174,16 @@ train.default <- function(x, y,
        stop('`savePredictions` should be either logical or "all", "final" or "none"')
   }
   
-  ## Create hold--out indicies
-  if(is.null(trControl$indexOut) & trControl$method != "oob"){
-    if(tolower(trControl$method) != "timeslice") {     
+  ## Create hold--out indices
+  if(is.null(trControl$indexOut) && trControl$method != "oob"){
+    if(tolower(trControl$method) != "timeslice") {
       y_index <- if(class(y)[1] == "Surv") 1:nrow(y) else seq(along = y)
-      trControl$indexOut <- lapply(trControl$index,
-                                   function(training, allSamples) allSamples[-unique(training)],
-                                   allSamples = y_index)
+      trControl$indexOut <- lapply(trControl$index, function(training) {
+        if(grepl("optimism|boot_all", trControl$method))
+          list(holdoutIndex = setdiff(y_index, training), origIndex = y_index, bootIndex = training)
+        else
+          setdiff(y_index, training)
+      })
       names(trControl$indexOut) <- prettySeq(trControl$indexOut)
     } else {
       trControl$indexOut <- createTimeSlices(seq(along = y),
@@ -187,9 +193,8 @@ train.default <- function(x, y,
     }
   }
   
-  if(trControl$method != "oob" & is.null(trControl$index)) names(trControl$index) <- prettySeq(trControl$index)
-  if(trControl$method != "oob" & is.null(names(trControl$index)))    names(trControl$index)    <- prettySeq(trControl$index)
-  if(trControl$method != "oob" & is.null(names(trControl$indexOut))) names(trControl$indexOut) <- prettySeq(trControl$indexOut)
+  if(trControl$method != "oob" && is.null(names(trControl$index)))    names(trControl$index)    <- prettySeq(trControl$index)
+  if(trControl$method != "oob" && is.null(names(trControl$indexOut))) names(trControl$indexOut) <- prettySeq(trControl$indexOut)
   
   ## Gather all the pre-processing info. We will need it to pass into the grid creation
   ## code so that there is a concordance between the data used for modeling and grid creation
@@ -330,7 +335,7 @@ train.default <- function(x, y,
     
     
     num_rs <- if(trControl$method != "oob") length(trControl$index) else 1L
-    if(trControl$method == "boot632") num_rs <- num_rs + 1L
+    if(isTRUE(grepl("boot632|optimism|boot_all", trControl$method))) num_rs <- num_rs + 1L
     ## Set or check the seeds when needed
     if(is.null(trControl$seeds) || all(is.na(trControl$seeds)))  {
       seeds <- sample.int(n = 1000000L, size = num_rs * nrow(trainInfo$loop) + 1L)
@@ -379,6 +384,9 @@ train.default <- function(x, y,
                     sep = ""))
     }
     
+    if(trControl$method == "boot632plus" && metric != "Accuracy")
+      stop("The boot632plus method is only implemented for classification Accuracy")
+    
     if(trControl$method == "oob"){
       tmp <- oobTrainWorkflow(x = x, y = y, wts = weights, 
                               info = trainInfo, method = models,
@@ -424,6 +432,9 @@ train.default <- function(x, y,
         }
       }
     }
+    
+    if(grepl("optimism|boot_all", trControl$method))
+      trControl$indexOut <- lapply(trControl$indexOut, "[[", 1L)
     
     ## TODO we used to give resampled results for LOO
     if(!(trControl$method %in% c("LOOCV", "oob"))) {
