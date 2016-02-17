@@ -524,7 +524,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
   if(any(grepl("accuracy", colnames(out), ignore.case = TRUE))) {
     accCols <- grep("accuracy(?!.*(SD|Optimism)$)", colnames(out), ignore.case = TRUE, perl = TRUE)
     out[ , accCols] <- 1 - out[ , accCols]
-    out[ , "AccuracyOptimism"] <- -out[ , "AccuracyOptimism"]
+    if(any(colnames(out) == "AccuracyOptimism")) out[ , "AccuracyOptimism"] <- -out[ , "AccuracyOptimism"]
   }
   
   list(performance = out, resamples = resamples, predictions = if(keep_pred) pred else NULL)
