@@ -66,7 +66,7 @@ A variety of models are currently available and are enumerated by tag (i.e. thei
   \item{results }{a data frame the training error rate and values of the tuning parameters.}
   \item{bestTune }{a data frame with the final parameters.}  
 
-  \item{call }{the (matched) function call with dots expanded}
+  \item{call}{the (matched) function call with dots expanded}
   \item{dots}{a list containing any ... values passed to the original call}
   \item{metric}{a string that specifies what summary metric will be used to select the optimal model.}  
   \item{control}{the list of control parameters.}
@@ -82,6 +82,7 @@ A variety of models are currently available and are enumerated by tag (i.e. thei
   \item{maximize}{a logical recycled  from the function arguments.}
   \item{yLimits}{the range of the training set outcomes.}
   \item{times}{a list of execution times: \code{everything} is for the entire call to \code{train}, \code{final} for the final model fit and, optionally, \code{prediction} for the time to predict new samples (see \code{\link{trainControl}})}
+  \item{mericCI}{The (possibly \code{NA}) BCa confidence interval for the chosen \code{metric}.}
 }
 
 

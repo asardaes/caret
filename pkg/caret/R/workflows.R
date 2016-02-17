@@ -41,7 +41,77 @@ expandParameters <- function(fixed, seq)
   out
 }
 
-nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, testing = FALSE, ...)
+## My own version of boot's 'usual.jack' that doesn't use a 'for' loop and always uses stype "i"
+empinf <- function(data, statistic, index, ...) {
+  n <- NROW(data)
+  i0 <- seq_len(n)
+  
+  tobs <- statistic(data, i0, ...)
+  
+  if(is.null(names(tobs)) && is.character(index)) index <- 1L
+  tobs <- tobs[index]
+  
+  l <- sapply(seq_len(n), function(i) {
+    (n - 1L) * (tobs - statistic(data, i0[-i], ...)[index])
+  })
+  
+  l
+}
+
+## For BCa-CI, create closure, possibly for each parallel worker, to save space
+empInfFun <- function(Parm, num_obs)
+{
+  ## pre-allocation of matrices
+  empInf <- matrix(0, nrow = NROW(Parm), ncol = num_obs)
+  num <- matrix(0, nrow = NROW(Parm), ncol = num_obs)
+  colnames(empInf) <- colnames(num) <- paste0(".obs", 1:ncol(empInf))
+  id_parm <- 1L:ncol(Parm)
+  
+  empInfUpdate <- function(newEmpInf, holdoutIndex, parm) {
+    if(!missing(newEmpInf) && !missing(holdoutIndex) && length(holdoutIndex) > 0L) {
+      id_col <- as.integer(holdoutIndex)
+      
+      id_row <- lapply(id_parm, function(j) Parm[ , j] %in% parm[ , j])
+      id_row <- which(Reduce("&", id_row))
+      
+      if(is.matrix(newEmpInf)) {
+        if(nrow(parm) > 1L && length(id_row) != nrow(parm)) 
+          newEmpInf <- stats::aggregate(newEmpInf, by = as.list(parm), sum)[ , -id_parm, drop = FALSE]
+        
+        n <- nrow(newEmpInf)
+        m <- ncol(newEmpInf)
+        
+      } else {
+        n <- 1L
+        m <- length(newEmpInf)
+      }
+      
+      if(any(id_col > ncol(empInf)) || n != length(id_row) || m != length(id_col))
+        stop("Dimension mismatch while calculating empirical influence values.")
+      
+      newEmpInf <- as.numeric(t(newEmpInf))
+      .Call("empInfUpdate", empInf, nrow(empInf), id_row, id_col, newEmpInf, PACKAGE = "caret")
+      
+      if(nrow(parm) > 1L && length(id_row) != nrow(parm))
+        newNum <- stats::aggregate(matrix(1, nrow(parm), 1L), by = as.list(parm), sum)$V1
+      else
+        newNum <- rep(1, nrow(parm))
+      
+      newNum <- as.numeric(rep_len(newNum, length.out = length(newEmpInf)))
+      .Call("empInfUpdate", num, nrow(num), id_row, id_col, newNum, PACKAGE = "caret")
+      
+      invisible(NULL)
+      
+    } else {
+      list(empInf = data.frame(Parm, as.data.frame(empInf)),
+           num = data.frame(Parm, as.data.frame(num)))
+    }
+  }
+  
+  empInfUpdate
+}
+
+nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, metric, tuneGrid, testing = FALSE, ...)
 {
   loadNamespace("caret")
   ppp <- list(options = ppOpts)
@@ -49,6 +119,43 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
   
   printed <- format(info$loop, digits = 4)
   colnames(printed) <- gsub("^\\.", "", colnames(printed))
+  
+  ## for confidence intervals
+  if(!is.null(ctrl$confLevel)) {
+    ctrl$confType <- match.arg(ctrl$confType, c("norm", "basic", "perc", "bca", "L", "both"))
+    
+    if(ctrl$confType != "L") {
+      if(ctrl$allowParallel && getDoParWorkers() > 1L) {
+        ## one object for each worker
+        foreach(i = seq_len(getDoParWorkers()),
+                .packages = c("stats", "caret")) %dopar% {
+                  attach(new.env(parent = globalenv()), name = "caret:empInfUpdate")
+                  assign(".empInfUpdate", empInfFun(tuneGrid, nrow(x)), "caret:empInfUpdate")
+                  NULL
+                }
+        
+        on.exit(expr = {
+          foreach(i = seq_len(getDoParWorkers())) %dopar% detach("caret:empInfUpdate")
+        })
+        
+      } else {
+        .empInfUpdate <- empInfFun(tuneGrid, nrow(x))
+      }
+    } 
+    
+    if(is.character(ctrl$confGamma) && ctrl$confType %in% c("L", "both")) {
+      ctrl$confGamma <- match.arg(ctrl$confGamma, c("range", "quantile"))
+      
+      ## subsamples for L-CI
+      b_in <- round(sapply(1:20, function(i) { nrow(x) ^ (1 / 2 * ((1 + i / (20 + 1)))) }))
+      
+      if(any(min(lengths(ctrl$indexOut)) < b_in)) {
+        ss <- min(lengths(ctrl$indexOut))
+        b_in <- round(seq(from = ss, to = 1, length.out = 21L))
+        b_in <- b_in[-21L]
+      }
+    }
+  }
   
   ## For 632 estimator, add an element to the index of zeros to trick it into
   ## fitting and predicting the full data set.
@@ -59,6 +166,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
     resampleIndex <- c(list("AllData" = rep(0, nrow(x))), resampleIndex)
     ctrl$indexOut <- c(list("AllData" = rep(0, nrow(x))),  ctrl$indexOut)
   }
+  
   `%op%` <- getOper(ctrl$allowParallel && getDoParWorkers() > 1)
   keep_pred <- isTRUE(ctrl$savePredictions) || ctrl$savePredictions %in% c("all", "final")
   if(ctrl$method %in% c("LOOB") && !keep_pred) stop("LOOB needs predictions to be saved ('savePredictions' parameter)")
@@ -260,7 +368,17 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
                         })
     
     if(testing) print(head(predicted))
-
+    
+    ## empirical influence of holdout samples for BCa-CI
+    if(!is.null(ctrl$confLevel) && ctrl$confType != "L" && names(resampleIndex)[iter] != "AllData") {
+      statFun <- function(df, ids, ...) ctrl$summaryFunction(df[ids, , drop = FALSE])
+      empInf <- do.call(rbind, lapply(predicted, function(df) {
+        empinf(data = df, statistic = statFun, index = metric)
+      }))
+      
+      .empInfUpdate(empInf, holdoutIndex, allParam)
+    }
+    
     ## same for the class probabilities
     if(ctrl$classProbs)
     {
@@ -310,6 +428,18 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
     }
     thisResample <- do.call(cbind, lapply(thisResample, function(x) do.call("rbind", x)))
     thisResample <- cbind(allParam, thisResample)
+    
+    ## subsample metrics for L-CI
+    if(!is.null(ctrl$confLevel) && ctrl$confType %in% c("L", "both") && is.character(ctrl$confGamma) && names(resampleIndex)[iter] != "AllData") {
+      id_b_in <- mapply(predicted, b_in, FUN = function(tmp, n) sample(nrow(tmp), n), SIMPLIFY = FALSE)
+      thisSubsample <- lapply(predicted, function(tmp) {
+        sapply(id_b_in, function(id) ctrl$summaryFunction(tmp[id, , drop = FALSE], lev = lev, model = method)[metric] )
+      })
+      thisSubsample <- do.call(rbind, thisSubsample)
+      thisSubsample <- cbind(allParam, thisSubsample)
+      colnames(thisSubsample) <- c(colnames(allParam), paste0(".sub", 1:20))
+      
+    } else thisSubsample <- NULL
     
   } else {
     tmpPred <- NULL
@@ -366,7 +496,25 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
     thisResample <- as.data.frame(t(thisResample))
     thisResample <- cbind(thisResample, info$loop[parm,,drop = FALSE])
     
+    ## empirical influence of holdout samples for BCa-CI
+    if(!is.null(ctrl$confLevel) && ctrl$confType != "L" && names(resampleIndex)[iter] != "AllData") {
+      statFun <- function(df, ids, ...) ctrl$summaryFunction(df[ids, , drop = FALSE])
+      empInf <- empinf(data = tmp, statistic = statFun, index = metric)
+      .empInfUpdate(empInf, holdoutIndex, info$loop[parm, , drop = FALSE])
+    }
+    
+    ## subsample metrics for L-CI
+    if(!is.null(ctrl$confLevel) && ctrl$confType %in% c("L", "both") && is.character(ctrl$confGamma) && names(resampleIndex)[iter] != "AllData") {
+      id_b_in <- lapply(b_in, function(n) sample(nrow(tmp), n))
+      thisSubsample <- sapply(id_b_in, function(id) {
+        ctrl$summaryFunction(tmp[id, , drop = FALSE], lev = lev, model = method)[metric]
+      })
+      thisSubsample <- cbind(info$loop[parm, , drop = FALSE], rbind(thisSubsample))
+      colnames(thisSubsample) <- c(colnames(info$loop), paste0(".sub", 1:20))
+      
+    } else thisSubsample <- NULL
   }
+  
   thisResample$Resample <- names(resampleIndex)[iter]
   
   # Transform accuracy to error rate, will be transformed back in the end
@@ -375,7 +523,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
   
   if(ctrl$verboseIter) progress(printed[parm,,drop = FALSE],
                                 names(resampleIndex), iter, FALSE)
-  list(resamples = thisResample, pred = tmpPred)
+  list(resamples = thisResample, pred = tmpPred, subsamples = thisSubsample)
 }
   
   resamples <- rbind.fill(result[names(result) == "resamples"])
@@ -530,7 +678,81 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
     resamples[ , accCols] <- 1 - resamples[ , accCols]
   }
   
-  list(performance = out, resamples = resamples, predictions = if(keep_pred) pred else NULL)
+  ## obtain final empirical influence values for each replication
+  if(!is.null(ctrl$confLevel) && ctrl$confType != "L") {
+    if(ctrl$allowParallel && getDoParWorkers() > 1L) {
+      empInf <- foreach(i = seq_len(getDoParWorkers()), .combine = c) %dopar% {
+        ret <- .empInfUpdate()
+        detach("caret:empInfUpdate") # clean parallel worker
+        ret
+      }
+      
+      on.exit()
+      
+      empInfNum <- rbind.fill(empInf[names(empInf) == "num"])
+      empInf <- rbind.fill(empInf[names(empInf) == "empInf"])
+      
+    } else {
+      empInf <- .empInfUpdate()
+      empInfNum <- empInf$num
+      empInf <- empInf$empInf
+    }
+    
+    empInfId <- grep("^\\.obs", colnames(empInf))
+    
+    empInf <- stats::aggregate(empInf[ , empInfId, drop = FALSE],
+                               by = as.list(empInf[ , -empInfId, drop = FALSE]),
+                               FUN = function(x) { if(all(is.na(x))) NA else sum(x, na.rm = TRUE) })
+    
+    empInfNum <- stats::aggregate(empInfNum[ , empInfId, drop = FALSE],
+                                  by = as.list(empInfNum[ , -empInfId, drop = FALSE]),
+                                  FUN = function(x) { if(all(is.na(x))) NA else sum(x, na.rm = TRUE) })
+    
+    empInf <- lapply(1:nrow(empInf), function(idRow) {
+      ret <- empInf[idRow, , drop = FALSE]
+      ret[1L, empInfId] <- empInf[idRow, empInfId] / empInfNum[idRow, empInfId]
+      ret
+    })
+    
+    empInf <- merge(tuneGrid, do.call(rbind, empInf))
+    
+  } else empInf = NULL
+  
+  ## final estimate for L-CI exponent
+  if(!is.null(ctrl$confLevel) && ctrl$confType %in% c("L", "both") && is.character(ctrl$confGamma)) {
+    subsamples <- rbind.fill(result[names(result) == "subsamples"])
+    id_sub <- grepl("^\\.sub", colnames(subsamples))
+    subsamples <- split(subsamples, as.list(subsamples[ , !id_sub, drop = FALSE]))
+    y_ij <- lapply(subsamples, function(x) {
+      ret <- as.matrix(x[ , id_sub, drop = FALSE])
+      
+      if(ctrl$confGamma == "range") {
+        q1 <- t(apply(ret, 2, quantile, probs = seq(from = 0.25, to = 0.01, length.out = 10)))
+        q2 <- t(apply(ret, 2, quantile, probs = seq(from = 0.75, to = 0.99, length.out = 10)))
+        ret <- log(q2 - q1)
+      
+      } else {
+        q0 <- t(apply(ret, 2, quantile, probs = seq(from = 0.75, to = 0.95, length.out = 15)))
+        ret <- log(q0)
+      }
+      
+      ret[is.infinite(ret)] <- NA
+      ret
+    })
+    y_i. <- lapply(y_ij, rowMeans, na.rm = TRUE)
+    y_bar <- lapply(y_ij, mean, na.rm = TRUE)
+    log_bin <- log(b_in)
+    log_bar <- mean(log_bin)
+    alpha_IJ <- sum((log_bin - log_bar)^2) # denominator
+    alpha_IJ <- mapply(y_i., y_bar, FUN = function(yi., ybar) { -sum((yi. - ybar) * (log_bin - log_bar)) }) / alpha_IJ
+    
+    subsamples <- lapply(subsamples, function(x) x[1, !id_sub, drop = FALSE])
+    subsamples <- data.frame(rbind.fill(subsamples), alpha = alpha_IJ)
+    
+  } else subsamples <- NULL
+  
+  list(performance = out, resamples = resamples, predictions = if(keep_pred) pred else NULL,
+       empInf = empInf, subsamples = subsamples)
 }
 
 

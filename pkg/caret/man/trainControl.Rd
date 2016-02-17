@@ -28,7 +28,10 @@ trainControl(method = "boot",
              adaptive = list(min = 5, alpha = 0.05,
              	               method = "gls", complete = TRUE),
              trim = FALSE,
-             allowParallel = TRUE)
+             allowParallel = TRUE,
+             confType = "L",
+             confLevel = NULL,
+             confGamma = "range")
 }
 \arguments{
   \item{method}{The resampling method: \code{"boot"}, \code{"boot632"}, \code{"cv"}, \code{"repeatedcv"},
@@ -44,7 +47,7 @@ trainControl(method = "boot",
   \item{search}{Either \code{"grid"} or \code{"random"}, describing how the tuning parameter grid is determined. See details below.}
   \item{initialWindow, horizon, fixedWindow}{possible arguments to \code{\link{createTimeSlices}}}
   \item{classProbs}{a logical; should class probabilities be computed for classification models (along with predicted values) in each resample?}
-  \item{summaryFunction}{a function to compute performance metrics across resamples. The arguments to the function should be the same as those in \code{\link{defaultSummary}}.}
+  \item{summaryFunction}{a function to compute performance metrics across resamples. The arguments to the function should be the same as those in \code{\link{defaultSummary}}, and the output should be named.}
   \item{selectionFunction}{the function used to select the optimal tuning parameter. This can be a name of the function or the function itself. See \code{\link{best}} for details and other options.}
   \item{preProcOptions}{A list of options to pass to \code{\link{preProcess}}. The type of pre-processing (e.g. center, scaling etc) is passed in via the \code{preProc} option in \code{\link{train}}.}
   \item{sampling}{a single character value describing the type of additional sampling that is conducted after resampling (usually to resolve class imbalances). Values are \code{"none"}, \code{"down"}, \code{"up"}, \code{"smote"}, or \code{"rose"}. The latter two values require the \pkg{DMwR} and \pkg{ROSE} packages, respectively. This argument can also be a list to facilitate custom sampling and these details can be found on the \pkg{caret} package website for sampling (link below).}
@@ -56,6 +59,9 @@ trainControl(method = "boot",
   \item{adaptive}{a list used when \code{method} is \code{"adaptive_cv"}, \code{"adaptive_boot"} or \code{"adaptive_LGOCV"}. See Details below. }
   \item{trim}{a logical. If \code{TRUE} the final model in \code{object\$finalModel} may have some components of the object removed so reduce the size of the saved object. The \code{predict} method will still work, but some other features of the model may not work. \code{trim}ing will occur only for models where this feature has been implemented. }
   \item{allowParallel}{if a parallel backend is loaded and available, should the function use it?}
+  \item{confType}{Type of confidence interval to compute. You can also specify "both" here to obtain the necessary estimates for both L and non-L intervals, but the "bca" interval will be initially returned. See Details.}
+  \item{confLevel}{Confidence level for the confidence interval.}
+  \item{confGamma}{Normalization exponent for "L" confidence interval. A string means it will be estimated and returned in the \code{\link{train}} result's \code{control}. Valid options are "range" and "quantile".}
 }
 
 \value{
@@ -79,6 +85,8 @@ Using adaptive resampling when \code{method} is either \code{"adaptive_cv"}, \co
 The option \code{search = "grid"} uses the default grid search routine. When \code{search = "random"}, a random search procedure is used (Bergstra and Bengio, 2012). See \url{http://topepo.github.io/caret/random.html} for details and an example.
 
 The \code{"boot632"} method uses the 0.632 estimator presented in Efron (1983), not to be confused with the 0.632+ estimator proposed later by the same author.
+
+The confidence interval is calculated using \code{\link{confidenceInterval}}. It will be calculated for the user's chosen \code{metric}, but the interpretation differs depending on \code{confType}. This might require more time and memory, so set \code{confLevel} to \code{NULL} to prevent the computations from being performed. The resulting interval could be \code{NULL} or infinite. For more information, see the documentation for \code{\link{confidenceInterval}}.
 }
 
 \author{Max Kuhn}

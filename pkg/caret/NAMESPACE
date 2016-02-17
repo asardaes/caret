@@ -15,6 +15,7 @@ importFrom(stats, .checkMFClasses, .getXlevels, aggregate, anova,
 importFrom(stats4, coef) 
 importFrom(utils, capture.output, getFromNamespace, head, 
            install.packages, installed.packages, object.size, flush.console, menu, stack)
+importFrom(boot, boot, boot.ci)
 
 export(anovaScores,
        as.data.frame.resamples,
@@ -49,6 +50,8 @@ export(anovaScores,
        cluster,
        cluster.resamples,
        compare_models,
+       confidenceInterval,
+       confidenceInterval.train,
        confusionMatrix,
        confusionMatrix.train,
        contr.dummy,
@@ -255,7 +258,6 @@ export(anovaScores,
        )
 
 S3method(confusionMatrix, default)
-S3method(confusionMatrix, train)
 S3method(spatialSign,     default)
 S3method(enumLC,          default)
 S3method(train,           default)
@@ -365,6 +367,9 @@ S3method(plot,  lift)
 S3method(plot,  calibration)
 S3method(plot,  gafs)
 S3method(plot,  safs) 
+
+S3method(confidenceInterval, default)
+S3method(confidenceInterval, train)
 
 S3method(confusionMatrix,  train)
 S3method(confusionMatrix,  rfe)

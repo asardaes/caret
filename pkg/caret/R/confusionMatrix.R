@@ -223,6 +223,9 @@ confusionMatrix.train <- function(data, norm = "overall", dnn = c("Prediction", 
   rownames(counts) <- colnames(counts) <- lev
   names(dimnames(counts)) <- dnn
   
+  ## confidence interval
+  metricCI <- confidenceInterval(data, ...)
+  
   ## out
   out <- list(table = as.table(counts),
               norm = norm,
@@ -245,11 +248,21 @@ print.confusionMatrix.train <- function(x, digits = 1, ...)
                      "")
   cat(normText, "\n")
   if(x$norm == "none" & x$B == 1) {
-    print(getFromNamespace("confusionMatrix.table", "caret")(x$table)) 
+    print(getFromNamespace("confusionMatrix.table", "caret")(x$table))
   } else {
-    print(round(x$table, digits))
-    
-    out <- cbind("Accuracy (average)", ":", formatC(sum(diag(x$table) / sum(x$table))))
+    print(round(x$table, digits)) 
+    if(!is.null(x$metricCI)) {
+      metricCI <- x$metricCI
+      metricCI[2] <- metricCI[2] * 100
+      metricCI <- formatC(metricCI)
+
+      if(!is.infinite(x$metricCI[3])) {
+        lhs <- paste(c(names(metricCI)[1], paste0(metricCI[2], "% CI")), ":")
+        lhs <- format(lhs, justify = "right")
+        out <- cbind(lhs, c(metricCI[1], paste0("(", metricCI[3], ", ", metricCI[4], ")")))
+      } else out <- cbind(names(metricCI)[1], ":", metricCI[1])
+
+    } else out <- cbind("Accuracy", ":", formatC(sum(diag(x$table) / sum(x$table))))
     
     dimnames(out) <- list(rep("", nrow(out)), rep("", ncol(out)))
     print(out, quote = FALSE)

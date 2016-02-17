@@ -20,7 +20,7 @@ Using a \code{\link{train}}, \code{\link{rfe}}, \code{\link{sbf}} object, determ
   \item{data}{An object of class \code{\link{train}}, \code{\link{rfe}}, \code{\link{sbf}} that did not use out-of-bag resampling or leave-one-out cross-validation.}
   \item{norm}{A character string indicating how the table entries should be normalized. Valid values are "none", "overall" or "average". }
   \item{dnn}{A character vector of dimnames for the table}
-  \item{\dots}{not used here}
+  \item{\dots}{further aguments for \code{\link{confidenceInterval}}}
 }
 \details{
 When \code{\link{train}} is used for tuning a model, it tracks the confusion matrix cell entries for the hold-out samples. These can be aggregated and used for diagnostic purposes. For \code{\link{train}}, the matrix is estimated for the final model tuning parameters determined by \code{\link{train}}. For \code{\link{rfe}}, the matrix is associated with the optimal number of variables.
@@ -32,7 +32,7 @@ a list of class \code{confusionMatrix.train}, \code{confusionMatrix.rfe} or \cod
   \item{table}{the normalized matrix}
   \item{norm}{an echo fo the call}
   \item{text}{a character string with details about the resampling procedure (e.g. "Bootstrapped (25 reps) Confusion Matrix"}
- 
+  \item{metricCI}{the confidence interval returned by \code{\link{confidenceInterval}}}
 }
 \author{Max Kuhn}
 

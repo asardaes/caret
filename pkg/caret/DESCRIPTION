@@ -25,7 +25,8 @@ Imports:
     stats,
     stats4,
     utils,
-    grDevices
+    grDevices,
+    boot
 Suggests:
     BradleyTerry2,
     e1071,

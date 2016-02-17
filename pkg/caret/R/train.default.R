@@ -415,7 +415,8 @@ train.default <- function(x, y,
         if(!grepl("adapt", trControl$method)){
           tmp <- nominalTrainWorkflow(x = x, y = y, wts = weights, 
                                       info = trainInfo, method = models,
-                                      ppOpts = preProcess, ctrl = trControl, lev = classLevels, ...)
+                                      ppOpts = preProcess, ctrl = trControl, lev = classLevels, 
+                                      metric = metric, tuneGrid = tuneGrid, ...)
           performance <- tmp$performance
           resampleResults <- tmp$resample
         } else {
@@ -435,6 +436,9 @@ train.default <- function(x, y,
     
     if(grepl("optimism|boot_all", trControl$method))
       trControl$indexOut <- lapply(trControl$indexOut, "[[", 1L)
+
+    empInf <- tmp$empInf
+    subsamples <- tmp$subsamples
     
     ## TODO we used to give resampled results for LOO
     if(!(trControl$method %in% c("LOOCV", "oob"))) {
@@ -521,7 +525,7 @@ train.default <- function(x, y,
     performance <- as.data.frame(t(performance))
     performance <- cbind(performance, tuneGrid)
     performance <- performance[-1,,drop = FALSE]
-    tmp <- resampledCM <- NULL
+    empInf <- tmp <- resampledCM <- NULL
   }
   ## Save some or all of the resampling summary metrics
   if(!(trControl$method %in% c("LOOCV", "oob", "none"))) {
@@ -617,6 +621,35 @@ train.default <- function(x, y,
   if(trControl$savePredictions == "final") 
     tmp$predictions <- merge(bestTune, tmp$predictions)
   
+  ## confidence interval
+  if(!is.null(byResample) && !is.null(trControl$confLevel)) {
+    if(trControl$confType != "L") {
+      L <- merge(empInf, bestTune)
+      L <- as.numeric(L[ , grepl("^\\.obs", colnames(L))])
+      
+    } else L <- NULL
+    
+    if(is.character(trControl$confGamma)) 
+      trControl$confGamma <- if(!is.null(subsamples)) merge(subsamples, bestTune)$alpha else NA
+    
+    ## in case of trControl$returnResamp = "all"
+    t <- merge(byResample, bestTune)[[metric]]
+    
+    if(trControl$confType == "both") trControl$confType <- "bca"
+    
+    metricCI <- confidenceInterval(t,
+                                   confLevel = trControl$confLevel,
+                                   confType = trControl$confType,
+                                   confGamma = trControl$confGamma,
+                                   sampleSize = nrow(outData),
+                                   subsampleSizes = lengths(trControl$indexOut),
+                                   metric = metric,
+                                   L = L)
+    
+  } else metricCI <- NULL
+  
+  if(is.character(trControl$confGamma)) trControl$confGamma <- NA
+  
   endTime <- proc.time()
   times <- list(everything = endTime - startTime,
                 final = finalTime)
@@ -639,7 +672,9 @@ train.default <- function(x, y,
                         perfNames = perfNames,
                         maximize = maximize,
                         yLimits = trControl$yLimits,
-                        times = times), 
+                        times = times,
+                        empInf = empInf,
+                        metricCI = metricCI), 
                    class = "train")
   trControl$yLimits <- NULL
   
@@ -648,8 +683,8 @@ train.default <- function(x, y,
     pData <- as.data.frame(pData)
     out$times$prediction <- system.time(predict(out, pData))
   } else  out$times$prediction <- rep(NA, 3)
-  out
   
+  out
 }
 
 train.formula <- function (form, data, ..., weights, subset, na.action = na.fail, contrasts = NULL)  {
