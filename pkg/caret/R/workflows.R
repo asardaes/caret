@@ -369,6 +369,10 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
   }
   thisResample$Resample <- names(resampleIndex)[iter]
   
+  # Transform accuracy to error rate, will be transformed back in the end
+  accCols <- grepl("accuracy", colnames(thisResample), ignore.case = TRUE)
+  thisResample[ , accCols] <- 1 - thisResample[ , accCols]
+  
   if(ctrl$verboseIter) progress(printed[parm,,drop = FALSE],
                                 names(resampleIndex), iter, FALSE)
   list(resamples = thisResample, pred = tmpPred)
@@ -452,10 +456,9 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
       out <- merge(out, gammaHat)
       
       sapply(1:nrow(out), function(idRow) {
-        # It would be more precise to use Error Rate instead of Accuracy, but this should be close enough...
-        Err1 <- 1 - out[idRow, "Accuracy"]
+        Err1 <- out[idRow, "Accuracy"]
         gammaHat <- out[idRow, "gammaHat"]
-        errBar <- 1 - out[idRow, "AccuracyApparent"]
+        errBar <- out[idRow, "AccuracyApparent"]
         
         Err1prime <- min(Err1, gammaHat)
         
@@ -467,7 +470,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
         
         Err632 <- (1-const) * errBar + const * Err1
         
-        out[idRow, "Accuracy"] <<- 1 - (Err632 + (Err1prime - errBar) * ((const*(1-const)*Rprime) / (1 - (1-const)*Rprime)))
+        out[idRow, "Accuracy"] <<- Err632 + (Err1prime - errBar) * ((const*(1-const)*Rprime) / (1 - (1-const)*Rprime))
       })
       
       out$gammaHat <- NULL
@@ -490,6 +493,12 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, tes
     })
     # Remove unnecessary SD columns
     out <- out[ , !grepl("(Orig|Boot)SD$", colnames(out), ignore.case = TRUE), drop = FALSE]
+  }
+  
+  # transform error rate back to accuracy
+  if(any(grepl("accuracy", colnames(out), ignore.case = TRUE))) {
+    accCols <- grep("accuracy(?!.*SD$)", colnames(out), ignore.case = TRUE, perl = TRUE)
+    out[ , accCols] <- 1 - out[ , accCols]
   }
   
   list(performance = out, resamples = resamples, predictions = if(keep_pred) pred else NULL)
