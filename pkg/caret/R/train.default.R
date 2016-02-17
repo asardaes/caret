@@ -433,6 +433,9 @@ train.default <- function(x, y,
       }
     }
     
+    if(grepl("optimism|boot_all", trControl$method))
+      trControl$indexOut <- lapply(trControl$indexOut, "[[", 1L)
+    
     ## TODO we used to give resampled results for LOO
     if(!(trControl$method %in% c("LOOCV", "oob"))) {
       if(modelType == "Classification" && length(grep("^\\cell", colnames(resampleResults))) > 0) {
