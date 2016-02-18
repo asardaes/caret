@@ -149,8 +149,12 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
       ## subsamples for L-CI
       b_in <- round(sapply(1:20, function(i) { nrow(x) ^ (1 / 2 * ((1 + i / (20 + 1)))) }))
       
-      if(any(min(lengths(ctrl$indexOut)) < b_in)) {
+      if(isTRUE(grepl("optimism|boot_all", ctrl$method)))
+        ss <- min(lengths(lapply(ctrl$indexOut, "[[", 1L)))
+      else
         ss <- min(lengths(ctrl$indexOut))
+      
+      if(any(ss < b_in)) {
         b_in <- round(seq(from = ss, to = 1, length.out = 21L))
         b_in <- b_in[-21L]
       }
@@ -372,11 +376,11 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     ## empirical influence of holdout samples for BCa-CI
     if(!is.null(ctrl$confLevel) && ctrl$confType != "L" && names(resampleIndex)[iter] != "AllData") {
       statFun <- function(df, ids, ...) ctrl$summaryFunction(df[ids, , drop = FALSE])
-      empInf <- do.call(rbind, lapply(predicted, function(df) {
+      empInf <- do.call(rbind, lapply(predicted[[1]], function(df) {
         empinf(data = df, statistic = statFun, index = metric)
       }))
       
-      .empInfUpdate(empInf, holdoutIndex, allParam)
+      .empInfUpdate(empInf, holdoutIndex[[1]], allParam)
     }
     
     ## same for the class probabilities
@@ -431,8 +435,8 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     
     ## subsample metrics for L-CI
     if(!is.null(ctrl$confLevel) && ctrl$confType %in% c("L", "both") && is.character(ctrl$confGamma) && names(resampleIndex)[iter] != "AllData") {
-      id_b_in <- mapply(predicted, b_in, FUN = function(tmp, n) sample(nrow(tmp), n), SIMPLIFY = FALSE)
-      thisSubsample <- lapply(predicted, function(tmp) {
+      id_b_in <- lapply(b_in, function(n) sample(nrow(predicted[[1]][[1]]), n))
+      thisSubsample <- lapply(predicted[[1]], function(tmp) {
         sapply(id_b_in, function(id) ctrl$summaryFunction(tmp[id, , drop = FALSE], lev = lev, model = method)[metric] )
       })
       thisSubsample <- do.call(rbind, thisSubsample)
@@ -500,7 +504,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     if(!is.null(ctrl$confLevel) && ctrl$confType != "L" && names(resampleIndex)[iter] != "AllData") {
       statFun <- function(df, ids, ...) ctrl$summaryFunction(df[ids, , drop = FALSE])
       empInf <- empinf(data = tmp, statistic = statFun, index = metric)
-      .empInfUpdate(empInf, holdoutIndex, info$loop[parm, , drop = FALSE])
+      .empInfUpdate(empInf, holdoutIndex[[1]], info$loop[parm, , drop = FALSE])
     }
     
     ## subsample metrics for L-CI
