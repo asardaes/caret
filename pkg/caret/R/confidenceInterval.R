@@ -15,17 +15,13 @@ confidenceInterval.default <- function(object, confLevel = 0.95, confType = "L",
               R = NROW(object), 
               call = "")
     
-    if(min(B$t[,1]) != max(B$t[,1])) {
-      metricCI <- tryCatch(boot::boot.ci(B, type = confType, L = L, conf = confLevel, ...)[[out_type]],
-                           warning = function(w) w,
-                           error = function(e) e)
+    if(min(B$t[ , 1L]) != max(B$t[ , 1L])) {
+      metricCI <- boot::boot.ci(B, type = confType, L = L, conf = confLevel, ...)[[out_type]]
       
-      if (!inherits(metricCI, "condition")) {
-        if(confType != "norm") metricCI <- metricCI[-c(2:3)]
-        metricCI <- c(B$t0, metricCI)
-        
-      } else metricCI <- c(B$t0, confLevel, -Inf, Inf)
-    } else metricCI <- c(B$t0, confLevel, -Inf, Inf)
+      if(confType != "norm") metricCI <- metricCI[-c(2:3)]
+      metricCI <- c(B$t0, metricCI)
+      
+    } else metricCI <- c(B$t0, confLevel, B$t[1L], B$t[1L])
     
   } else {
     if(length(object) != length(subsampleSizes))
@@ -65,7 +61,7 @@ confidenceInterval.train <- function(object,
                                      ..., 
                                      newdata = NULL,
                                      newoutcome = NULL,
-                                     bootNum = 1000) {
+                                     bootNum = 1000L) {
   force(confLevel)
   force(confType)
   force(confGamma)
@@ -93,14 +89,21 @@ confidenceInterval.train <- function(object,
         L <- NULL
       }
       
+      ## Final estimate given by training might not be simply the average value
+      originalEstimate <- merge(object$results, object$bestTune)[[metric]]
+      
       ## in case of trControl$returnResamp = "all"
       object <- merge(object$resample, object$bestTune)[[metric]]
       
-      NextMethod("confidenceInterval",
-                 confLevel = confLevel, confType = confType, confGamma = confGamma,
-                 L = L, metric = metric, sampleSize = sampleSize, subsampleSizes = subsampleSizes, ...)
+      metricCI <- NextMethod("confidenceInterval",
+                             confLevel = confLevel, confType = confType, confGamma = confGamma,
+                             L = L, metric = metric, 
+                             sampleSize = sampleSize, subsampleSizes = subsampleSizes, ...)
       
     } else stop("Resample results are not available.")
+    
+    metricCI[1L] <- originalEstimate
+    metricCI
     
   } else {
     ## in case the confidence interval is based on new, hopefully unseen data...

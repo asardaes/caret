@@ -646,6 +646,9 @@ train.default <- function(x, y,
                                    metric = metric,
                                    L = L)
     
+    ## Final estimate given by training might not be simply the average value
+    metricCI[1L] <- merge(performance, bestTune)[[metric]]
+    
   } else metricCI <- NULL
   
   if(is.character(trControl$confGamma)) trControl$confGamma <- NA
