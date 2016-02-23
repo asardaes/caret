@@ -137,24 +137,62 @@ confidenceInterval.train <- function(object,
     } else {
       ## L confidence interval
       
-      if(is.null(confGamma) || !is.numeric(confGamma)) 
-        stop("Gamma was not estimated or was not provided. Please set its value manually.")
+      if(!is.numeric(confGamma) && !is.character(confGamma)) 
+        stop("Please set gamma value manually or choose between 'range' and 'quantile' methods.")
+      else if(is.character(confGamma))
+        confGamma <- match.arg(confGamma, c("range", "quantile"))
       
       testdata <- data.frame(obs = newoutcome, pred = predict(object, newdata, ...))
       
-      sub_sizes <- round(nrow(newdata) ^ (1 / 2 * ((1 + (1:number) / (number + 1)))))
+      samp_size <- round(nrow(testdata) ^ (2/3))
       
-      lev <- levels(newoutcome)
+      if(is.character(confGamma)) {
+        sub_sizes <- round(nrow(testdata) ^ (1 / 2 * ((1 + (1:20) / (20 + 1)))))
+        
+        if(any(sub_sizes > samp_size)) {
+          sub_sizes <- round(seq(from = samp_size, to = 1, length.out = 21L))
+          sub_sizes <- sub_sizes[-21L]
+        }
+        
+        lev <- levels(newoutcome)
+        
+        subsamples <- t(sapply(1:number, function(dummy) {
+          ids <- lapply(sub_sizes, function(ss) sample(nrow(testdata), ss))
+          sapply(ids, function(id) {
+            subdf <- testdata[id, , drop = FALSE]
+            object$control$summaryFunction(subdf, lev = lev, model = object)[metric]
+          })
+        }))
+        
+        if(confGamma == "range") {
+          q1 <- t(apply(subsamples, 2, quantile, probs = seq(from = 0.25, to = 0.01, length.out = 10)))
+          q2 <- t(apply(subsamples, 2, quantile, probs = seq(from = 0.75, to = 0.99, length.out = 10)))
+          y_ij <- log(q2 - q1)
+          
+        } else {
+          q0 <- t(apply(subsamples, 2, quantile, probs = seq(from = 0.75, to = 0.95, length.out = 15)))
+          y_ij <- log(q0)
+        }
+        
+        y_ij[is.infinite(y_ij)] <- NA
+        
+        y_i. <- rowMeans(y_ij, na.rm = TRUE)
+        y_bar <- mean(y_ij, na.rm = TRUE)
+        log_bin <- log(sub_sizes)
+        log_bar <- mean(log_bin)
+        confGamma <- sum((log_bin - log_bar)^2) # denominator
+        confGamma <- (-sum((y_i. - y_bar) * (log_bin - log_bar))) / confGamma
+      }
       
-      object <- sapply(sub_sizes, function(sub) {
-        id <- sample(nrow(testdata), sub)
+      object <- sapply(1:number, function(dummy) {
+        id <- sample(nrow(testdata), samp_size)
         subdf <- testdata[id, , drop = FALSE]
         object$control$summaryFunction(subdf, lev = lev, model = object)[metric]
       })
       
       NextMethod("confidenceInterval",
                  confLevel = confLevel, confType = confType, confGamma = confGamma,
-                 metric = metric, sampleSize = nrow(newdata), subsampleSizes = sub_sizes, ...)
+                 metric = metric, sampleSize = nrow(newdata), subsampleSizes = rep(samp_size, length(object)), ...)
     }
   }
 }
