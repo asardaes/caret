@@ -13,7 +13,7 @@ Compute confidence intervals for a given metric using the values obtained during
                    ...,
                    newdata = NULL,
                    newoutcome = NULL,
-                   bootNum = 1000)
+                   number = 1000)
 }
 \arguments{
   \item{object}{
@@ -37,8 +37,8 @@ Compute confidence intervals for a given metric using the values obtained during
   \item{newoutcome}{
   The outcomes corresponding to \code{newdata}.
 }
-  \item{bootNum}{
-  Number of bootstrap samples for the calculation of the bootstrap intervals. Only relevant if \code{newdata} is provided.
+  \item{number}{
+  Number of bootstrap samples or subsamples for the calculation of the bootstrap intervals. Only relevant if \code{newdata} is provided.
 }
 }
 \details{

@@ -61,7 +61,7 @@ confidenceInterval.train <- function(object,
                                      ..., 
                                      newdata = NULL,
                                      newoutcome = NULL,
-                                     bootNum = 1000L) {
+                                     number = 1000) {
   force(confLevel)
   force(confType)
   force(confGamma)
@@ -123,7 +123,7 @@ confidenceInterval.train <- function(object,
       
       testdata <- data.frame(obs = newoutcome, pred = predict(object, newdata, ...))
       
-      B <- boot::boot(testdata, statistic = statistic, stype = "i", R = bootNum, ...)
+      B <- boot::boot(testdata, statistic = statistic, stype = "i", R = number, ...)
       
       metricCI <- boot::boot.ci(B, conf = confLevel, type = confType, ...)[[out_type]]
       if(confType != "norm") metricCI <- metricCI[-c(2:3)]
@@ -142,7 +142,7 @@ confidenceInterval.train <- function(object,
       
       testdata <- data.frame(obs = newoutcome, pred = predict(object, newdata, ...))
       
-      sub_sizes <- round(nrow(newdata) ^ (1 / 2 * ((1 + (1:1000) / 1001))))
+      sub_sizes <- round(nrow(newdata) ^ (1 / 2 * ((1 + (1:number) / (number + 1)))))
       
       lev <- levels(newoutcome)
       
