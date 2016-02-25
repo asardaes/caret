@@ -20,13 +20,11 @@ modelInfo <- list(label = "Conditional Inference Tree",
                     if(any(names(theDots) == "controls"))
                     {
                       theDots$controls@tgctrl@maxdepth <- param$maxdepth
-                      theDots$controls@gtctrl@mincriterion <- 0
                       ctl <- theDots$controls
                       theDots$controls <- NULL
                       
                     } else ctl <- do.call(getFromNamespace("ctree_control", "party"), 
-                                          list(maxdepth = param$maxdepth,
-                                               mincriterion = 0))
+                                          list(maxdepth = param$maxdepth))
                     ## pass in any model weights
                     if(!is.null(wts)) theDots$weights <- wts
                     modelArgs <- c(
