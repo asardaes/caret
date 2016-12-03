@@ -19,7 +19,7 @@ normalized. Valid values are "none", "overall" or "average".}
 
 \item{dnn}{A character vector of dimnames for the table}
 
-\item{\dots}{not used here}
+\item{\dots}{Further arguments for \code{\link{lci}}.}
 }
 \value{
 a list of class \code{confusionMatrix.train},
@@ -27,6 +27,7 @@ a list of class \code{confusionMatrix.train},
 \item{table}{the normalized matrix} \item{norm}{an echo fo the call}
 \item{text}{a character string with details about the resampling procedure
 (e.g. "Bootstrapped (25 reps) Confusion Matrix"}
+\item{metricCI}{the confidence interval returned by \code{\link{lci}}}
 }
 \description{
 Using a \code{\link{train}}, \code{\link{rfe}}, \code{\link{sbf}} object,

@@ -118,6 +118,9 @@ outcomes.} \item{times}{a list of execution times: \code{everything} is for
 the entire call to \code{train}, \code{final} for the final model fit and,
 optionally, \code{prediction} for the time to predict new samples (see
 \code{\link{trainControl}})}
+\item{levels}{The class levels}
+\item{metricCI}{The L confidence interval for the chosen metric (see 
+\code{\link{lci}})}
 }
 \description{
 This function sets up a grid of tuning parameters for a number of

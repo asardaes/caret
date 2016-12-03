@@ -108,6 +108,9 @@
 #' the entire call to \code{train}, \code{final} for the final model fit and,
 #' optionally, \code{prediction} for the time to predict new samples (see
 #' \code{\link{trainControl}})}
+#' \item{levels}{The class levels}
+#' \item{metricCI}{The L confidence interval for the chosen metric (see 
+#' \code{\link{lci}})}
 #' @author Max Kuhn (the guts of \code{train.formula} were based on Ripley's
 #' \code{nnet.formula})
 #' @seealso \code{\link{models}}, \code{\link{trainControl}},
@@ -641,7 +644,8 @@ train.default <- function(x, y,
         if(!grepl("adapt", trControl$method)){
           tmp <- nominalTrainWorkflow(x = x, y = y, wts = weights,
                                       info = trainInfo, method = models,
-                                      ppOpts = preProcess, ctrl = trControl, lev = classLevels, ...)
+                                      ppOpts = preProcess, ctrl = trControl, lev = classLevels,
+                                      metric = metric, ...)
           performance <- tmp$performance
           resampleResults <- tmp$resample
         } else {
@@ -661,6 +665,8 @@ train.default <- function(x, y,
     
     ## Remove extra indices
     trControl$indexExtra <- NULL
+    ## Extract subsamples if present
+    subsamples <- tmp$subsamples
 
     ## TODO we used to give resampled results for LOO
     if(!(trControl$method %in% c("LOOCV", "oob"))) {
@@ -846,6 +852,26 @@ train.default <- function(x, y,
 
   if(trControl$savePredictions == "final")
     tmp$predictions <- merge(bestTune, tmp$predictions)
+  
+  ## confidence interval
+  if(!is.null(byResample) && !is.null(trControl$confLevel)) {
+    if(is.character(trControl$confGamma))
+      trControl$confGamma <- if(!is.null(subsamples)) merge(subsamples, bestTune)$alpha else NA
+    
+    ## in case of trControl$returnResamp = "all"
+    t <- merge(byResample, bestTune)[[metric]]
+    
+    metricCI <- lciHelper(t,
+                          confLevel = trControl$confLevel,
+                          confGamma = trControl$confGamma,
+                          sampleSize = nrow(outData),
+                          subsampleSizes = lengths(trControl$indexOut),
+                          metric = metric)
+    
+    ## Final estimate given by training might not be simply the average value
+    metricCI[1L] <- merge(performance, bestTune)[[metric]]
+    
+  } else metricCI <- NULL
 
   endTime <- proc.time()
   times <- list(everything = endTime - startTime,
@@ -870,7 +896,8 @@ train.default <- function(x, y,
                         maximize = maximize,
                         yLimits = trControl$yLimits,
                         times = times,
-                        levels = classLevels),
+                        levels = classLevels,
+                        metricCI = metricCI),
                    class = "train")
   trControl$yLimits <- NULL
 

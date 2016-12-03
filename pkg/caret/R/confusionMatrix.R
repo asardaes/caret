@@ -441,12 +441,13 @@ as.table.confusionMatrix <- function(x, ...)  x$table
 #' @param norm A character string indicating how the table entries should be
 #' normalized. Valid values are "none", "overall" or "average".
 #' @param dnn A character vector of dimnames for the table
-#' @param \dots not used here
+#' @param \dots Further arguments for \code{\link{lci}}.
 #' @return a list of class \code{confusionMatrix.train},
 #' \code{confusionMatrix.rfe} or \code{confusionMatrix.sbf} with elements
 #' \item{table}{the normalized matrix} \item{norm}{an echo fo the call}
 #' \item{text}{a character string with details about the resampling procedure
 #' (e.g. "Bootstrapped (25 reps) Confusion Matrix"}
+#' \item{metricCI}{the confidence interval returned by \code{\link{lci}}}
 #' @author Max Kuhn
 #' @seealso \code{\link{confusionMatrix}}, \code{\link{train}},
 #' \code{\link{rfe}}, \code{\link{sbf}}, \code{\link{trainControl}}
@@ -509,12 +510,16 @@ confusionMatrix.train <- function(data, norm = "overall", dnn = c("Prediction", 
   ## names
   rownames(counts) <- colnames(counts) <- lev
   names(dimnames(counts)) <- dnn
+  
+  ## confidence interval
+  metricCI <- lci(data, ...)
 
   ## out
   out <- list(table = as.table(counts),
               norm = norm,
               B = length(data$control$index),
-              text = paste(resampText, "Confusion Matrix"))
+              text = paste(resampText, "Confusion Matrix"),
+              metricCI = metricCI)
   class(out) <- paste0("confusionMatrix.", class(data))
   out
 }
@@ -540,8 +545,18 @@ print.confusionMatrix.train <- function(x, digits = 1, ...){
     print(getFromNamespace("confusionMatrix.table", "caret")(x$table))
   } else {
     print(round(x$table, digits))
-
-    out <- cbind("Accuracy (average)", ":", formatC(sum(diag(x$table) / sum(x$table))))
+    if(!is.null(x$metricCI)) {
+      metricCI <- x$metricCI
+      metricCI[2] <- metricCI[2] * 100
+      metricCI <- formatC(metricCI)
+      
+      if(!is.infinite(x$metricCI[3])) {
+        lhs <- paste(c(names(metricCI)[1], paste0(metricCI[2], "% CI")), ":")
+        lhs <- format(lhs, justify = "right")
+        out <- cbind(lhs, c(metricCI[1], paste0("(", metricCI[3], ", ", metricCI[4], ")")))
+      } else out <- cbind(names(metricCI)[1], ":", metricCI[1])
+      
+    } else out <- cbind("Accuracy (average)", ":", formatC(sum(diag(x$table) / sum(x$table))))
 
     dimnames(out) <- list(rep("", nrow(out)), rep("", ncol(out)))
     print(out, quote = FALSE)

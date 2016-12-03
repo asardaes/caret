@@ -50,6 +50,11 @@
 #' 
 #' Note that if \code{index} or \code{indexOut} are specified, the label shown by \code{train} may not be accurate since these arguments supersede the \code{method} argument.
 #' 
+#' The confidence interval is calculated using \code{\link{lci}}. It will be calculated for the
+#' user's chosen \code{metric}. This might require more time and memory, so set \code{confLevel} to
+#' \code{NULL} to prevent the computations from being performed. The resulting interval could be
+#' infinite. For more information, see the documentation for \code{\link{lci}}.
+#' 
 #' @param method The resampling method: \code{"boot"}, \code{"boot632"},
 #' \code{"optimism_boot"}, \code{"boot_all"},
 #' \code{"cv"}, \code{"repeatedcv"}, \code{"LOOCV"}, \code{"LGOCV"} (for
@@ -133,6 +138,10 @@
 #' occur only for models where this feature has been implemented.
 #' @param allowParallel if a parallel backend is loaded and available, should
 #' the function use it?
+#' @param confLevel Confidence level for the confidence interval.
+#' @param confGamma Normalization exponent for "L" confidence interval. A string means it will be
+#'   estimated and returned in the \code{\link{train}} result's \code{control}. Valid options are
+#'   "range" and "quantile".
 #' @return An echo of the parameters specified
 #' @author Max Kuhn
 #' @references Efron (1983). ``Estimating the error rate of a prediction rule:
@@ -219,7 +228,9 @@ trainControl <- function(method = "boot",
                          seeds = NA,
                          adaptive = list(min = 5, alpha = 0.05, method = "gls", complete = TRUE),
                          trim = FALSE,
-                         allowParallel = TRUE)
+                         allowParallel = TRUE,
+                         confLevel = NULL,
+                         confGamma = "range")
 {
   if(is.null(selectionFunction)) stop("null selectionFunction values not allowed")
   if(!(returnResamp %in% c("all", "final", "none"))) stop("incorrect value of returnResamp")
@@ -263,5 +274,7 @@ trainControl <- function(method = "boot",
        seeds = seeds,
        adaptive = adaptive,
        trim = trim,
-       allowParallel = allowParallel)
+       allowParallel = allowParallel,
+       confLevel = confLevel,
+       confGamma = confGamma)
 }

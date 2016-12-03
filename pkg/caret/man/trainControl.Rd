@@ -15,7 +15,7 @@ trainControl(method = "boot", number = ifelse(grepl("cv", method), 10, 25),
   indexOut = NULL, indexFinal = NULL, timingSamps = 0,
   predictionBounds = rep(FALSE, 2), seeds = NA, adaptive = list(min = 5,
   alpha = 0.05, method = "gls", complete = TRUE), trim = FALSE,
-  allowParallel = TRUE)
+  allowParallel = TRUE, confLevel = NULL, confGamma = "range")
 }
 \arguments{
 \item{method}{The resampling method: \code{"boot"}, \code{"boot632"},
@@ -124,6 +124,12 @@ occur only for models where this feature has been implemented.}
 
 \item{allowParallel}{if a parallel backend is loaded and available, should
 the function use it?}
+
+\item{confLevel}{Confidence level for the confidence interval.}
+
+\item{confGamma}{Normalization exponent for "L" confidence interval. A string means it will be
+estimated and returned in the \code{\link{train}} result's \code{control}. Valid options are
+"range" and "quantile".}
 }
 \value{
 An echo of the parameters specified
@@ -179,6 +185,11 @@ The \code{"boot632"} method should not to be confused with the 0.632+
 estimator proposed later by the same author.
 
 Note that if \code{index} or \code{indexOut} are specified, the label shown by \code{train} may not be accurate since these arguments supersede the \code{method} argument.
+
+The confidence interval is calculated using \code{\link{lci}}. It will be calculated for the
+user's chosen \code{metric}. This might require more time and memory, so set \code{confLevel} to
+\code{NULL} to prevent the computations from being performed. The resulting interval could be
+infinite. For more information, see the documentation for \code{\link{lci}}.
 }
 \examples{
 
