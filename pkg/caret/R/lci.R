@@ -117,24 +117,7 @@ lci <- function(trainResult, confLevel = trainResult$control$confLevel, ...,
         })
       }))
       
-      if(confGamma == "range") {
-        q1 <- t(apply(subsamples, 2, quantile, probs = seq(from = 0.25, to = 0.01, length.out = 10)))
-        q2 <- t(apply(subsamples, 2, quantile, probs = seq(from = 0.75, to = 0.99, length.out = 10)))
-        y_ij <- log(q2 - q1)
-        
-      } else {
-        q0 <- t(apply(subsamples, 2, quantile, probs = seq(from = 0.75, to = 0.95, length.out = 15)))
-        y_ij <- log(q0)
-      }
-      
-      y_ij[is.infinite(y_ij)] <- NA
-      
-      y_i. <- rowMeans(y_ij, na.rm = TRUE)
-      y_bar <- mean(y_ij, na.rm = TRUE)
-      log_bin <- log(subsampleSizes)
-      log_bar <- mean(log_bin)
-      confGamma <- sum((log_bin - log_bar)^2) # denominator
-      confGamma <- (-sum((y_i. - y_bar) * (log_bin - log_bar))) / confGamma
+      confGamma <- estimateGamma(subsamples, subsampleSizes, confGamma)
     }
     
     samples <- sapply(1L:number, function(dummy) {
@@ -172,4 +155,24 @@ lciHelper <- function(samples, confLevel, confGamma, sampleSize, subsampleSizes,
   names(metricCI) <- c(metric, "ConfLevel", "Lower", "Upper")
   
   metricCI
+}
+
+estimateGamma <- function(samples, sizes, method) {
+  if(method == "range") {
+    q1 <- t(apply(samples, 2L, quantile, probs = seq(from = 0.25, to = 0.01, length.out = 10)))
+    q2 <- t(apply(samples, 2L, quantile, probs = seq(from = 0.75, to = 0.99, length.out = 10)))
+    y_ij <- log(q2 - q1)
+    
+  } else {
+    q0 <- t(apply(samples, 2L, quantile, probs = seq(from = 0.75, to = 0.95, length.out = 15)))
+    y_ij <- log(q0)
+  }
+  
+  y_ij[is.infinite(y_ij)] <- NA
+  y_i. <- rowMeans(y_ij, na.rm = TRUE)
+  y_bar <- mean(y_ij, na.rm = TRUE)
+  log_bin <- log(sizes)
+  log_bar <- mean(log_bin)
+  confGamma <- sum((log_bin - log_bar)^2) # denominator
+  (-sum((y_i. - y_bar) * (log_bin - log_bar))) / confGamma
 }

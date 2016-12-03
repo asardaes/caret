@@ -856,7 +856,7 @@ train.default <- function(x, y,
   ## confidence interval
   if(!is.null(byResample) && !is.null(trControl$confLevel)) {
     if(is.character(trControl$confGamma))
-      trControl$confGamma <- if(!is.null(subsamples)) merge(subsamples, bestTune)$alpha else NA
+      trControl$confGamma <- if(!is.null(subsamples)) merge(subsamples, bestTune)$gamma else NA
     
     ## in case of trControl$returnResamp = "all"
     t <- merge(byResample, bestTune)[[metric]]
