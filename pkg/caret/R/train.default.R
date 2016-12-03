@@ -853,25 +853,39 @@ train.default <- function(x, y,
   if(trControl$savePredictions == "final")
     tmp$predictions <- merge(bestTune, tmp$predictions)
   
-  ## confidence interval
+  ## L confidence interval
+  metricCI <- NULL
   if(!is.null(byResample) && !is.null(trControl$confLevel)) {
-    if(is.character(trControl$confGamma))
-      trControl$confGamma <- if(!is.null(subsamples)) merge(subsamples, bestTune)$gamma else NA
+    if(is.character(trControl$confGamma) && !is.null(subsamples)) {
+      ## in case of trControl$returnResamp = "all"
+      estimates <- merge(byResample, bestTune)[[metric]]
+      
+      id_sub <- grepl("^\\.sub", colnames(subsamples))
+      subsampleSizes <- attr(subsamples, "subsizes")
+      subsamples <- split(subsamples, as.list(subsamples[ , !id_sub, drop = FALSE]))
+      gamma <- sapply(subsamples, function(ss) {
+        ss <- as.matrix(ss[ , id_sub, drop = FALSE])
+        
+        estimateGamma(ss, subsampleSizes, trControl$confGamma, estimates)
+      })
+      subsamples <- lapply(subsamples, function(x) x[1L, !id_sub, drop = FALSE])
+      subsamples <- data.frame(rbind.fill(subsamples), gamma = gamma)
+      
+      trControl$confGamma <- merge(subsamples, bestTune)$gamma
+    }
     
-    ## in case of trControl$returnResamp = "all"
-    t <- merge(byResample, bestTune)[[metric]]
-    
-    metricCI <- lciHelper(t,
-                          confLevel = trControl$confLevel,
-                          confGamma = trControl$confGamma,
-                          sampleSize = nrow(outData),
-                          subsampleSizes = lengths(trControl$indexOut),
-                          metric = metric)
-    
-    ## Final estimate given by training might not be simply the average value
-    metricCI[1L] <- merge(performance, bestTune)[[metric]]
-    
-  } else metricCI <- NULL
+    if (is.numeric(trControl$confGamma)) {
+      metricCI <- lciHelper(estimates,
+                            confLevel = trControl$confLevel,
+                            confGamma = trControl$confGamma,
+                            sampleSize = nrow(outData),
+                            subsampleSizes = lengths(trControl$indexOut),
+                            metric = metric)
+      
+      ## Final estimate given by training might not be simply the average value
+      metricCI[1L] <- merge(performance, bestTune)[[metric]]
+    }
+  }
 
   endTime <- proc.time()
   times <- list(everything = endTime - startTime,

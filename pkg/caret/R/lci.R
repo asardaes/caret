@@ -4,13 +4,16 @@
 #' 
 #' The confidence interval, denoted here as LCI, is based on Politis and Romano (1994).
 #' 
-#' It requires almost no additional overhead for the calculations, but it is not entirely
-#' nonparametric. The normalization exponent \code{confGamma} should be set according to the
-#' expected sampling distribution of the statistic (in this case \code{metric}). A value of 0.5
-#' would assume normality. It can be estimated during training using the range or quantile methods
-#' discussed in Bertail, Politis and Romano (1999), which requires more memory since it must create
-#' a matrix with 20 columns and (number of replications * number of tunning parameter combinations)
-#' rows.
+#' It requires almost no additional overhead for the calculations, but it is not entirely 
+#' nonparametric. The normalization exponent \code{confGamma} should be set according to the 
+#' expected sampling distribution of the statistic (in this case \code{metric}). A value of 0.5 
+#' would assume normality. It can be estimated during training using the "range" or "quantile"
+#' methods discussed in Bertail, Politis and Romano (1999), which requires more memory since it must
+#' create a matrix with 20 columns and (number of replications * number of tunning parameter
+#' combinations) rows.
+#' 
+#' Specifying "skewness" tries to decide which estimation method to use based on the skewness of the
+#' resampling distribution (requires \pkg{e1071} package).
 #' 
 #' If the resulting confidence interval is \code{NULL}, it means no cross-validation was done, or it
 #' is unsupported (e.g \code{oob}). If it has infinite values, it could be due to:
@@ -48,11 +51,11 @@
 #' @param trainResult An object returned by \code{\link{train}}.
 #' @param confLevel The desired confidence level between 0 and 1.
 #' @param ... Further arguments for \code{\link[stats]{predict}} when \code{newdata} is provided.
-#' @param confGamma The normalization exponent. To estimate, use "range" or "quantile", otherwise
-#' provide the numeric value. See details.
+#' @param confGamma The normalization exponent. To estimate, use "range", "quantile" or "skewness",
+#'   otherwise provide the numeric value. See details.
 #' @param newdata New data to use to calculate the interval.
 #' @param newoutcome The outcomes corresponding to \code{newdata}.
-#' @param number Number of subsamples for the calculation of the interval. Only relevant if
+#' @param number Number of subsamples for the calculation of the interval. Only relevant if 
 #'   \code{newdata} is provided.
 #'   
 #' @author Alexis Sarda
@@ -60,9 +63,10 @@
 #' @export
 #'   
 lci <- function(trainResult, confLevel = trainResult$control$confLevel, ..., 
-                confGamma = if (is.null(newdata)) trainResult$control$confGamma else "range",
+                confGamma = if (is.null(newdata)) trainResult$control$confGamma else "skewness",
                 newdata = NULL, newoutcome = NULL, number = 100L)
 {
+  if (class(trainResult) != "train") stop("Invalid train object provided")
   if (is.null(confLevel)) return(NULL)
   if (xor(is.null(newdata), is.null(newoutcome))) stop("New data and new outcome have to be provided together")
   
@@ -81,9 +85,9 @@ lci <- function(trainResult, confLevel = trainResult$control$confLevel, ...,
       originalEstimate <- merge(trainResult$results, trainResult$bestTune)[[metric]]
       
       ## in case of trControl$returnResamp = "all"
-      samples <- merge(trainResult$resample, trainResult$bestTune)[[metric]]
+      estimates <- merge(trainResult$resample, trainResult$bestTune)[[metric]]
       
-      metricCI <- lciHelper(samples, confLevel, confGamma, sampleSize, subsampleSizes, metric)
+      metricCI <- lciHelper(estimates, confLevel, confGamma, sampleSize, subsampleSizes, metric)
       metricCI[1L] <- originalEstimate
       
     } else stop("Resample results are not available")
@@ -91,8 +95,8 @@ lci <- function(trainResult, confLevel = trainResult$control$confLevel, ...,
   } else {
     ## in case the confidence interval is based on new, hopefully unseen data...
     if (is.character(confGamma))
-      confGamma <- match.arg(confGamma, c("range", "quantile"))
-    if (!is.numeric(confGamma) || confGamma <= 0 || confGamma >= 1)
+      confGamma <- match.arg(confGamma, c("range", "quantile", "skewness"))
+    else if (!is.numeric(confGamma) || confGamma <= 0 || confGamma >= 1)
       stop("confGamma must be provided and must be between 0 and 1 if not estimated")
     
     testdata <- data.frame(obs = newoutcome, 
@@ -100,6 +104,14 @@ lci <- function(trainResult, confLevel = trainResult$control$confLevel, ...,
     
     sampleSize <- round(1.5 * nrow(testdata) ^ (2/3))
     
+    ## metrics based on subsamples
+    estimates <- sapply(1L:number, function(dummy) {
+      id <- sample(nrow(testdata), sampleSize)
+      subdf <- testdata[id, , drop = FALSE]
+      trainResult$control$summaryFunction(subdf, lev = lev, model = trainResult)[metric]
+    })
+    
+    ## gama estimation
     if (is.character(confGamma)) {
       subsampleSizes <- round(nrow(testdata) ^ (1 / 2 * ((1 + (1:20) / (20 + 1)))))
       
@@ -118,27 +130,22 @@ lci <- function(trainResult, confLevel = trainResult$control$confLevel, ...,
         })
       }))
       
-      confGamma <- estimateGamma(subsamples, subsampleSizes, confGamma)
+      confGamma <- estimateGamma(subsamples, subsampleSizes, confGamma, estimates)
     }
     
-    samples <- sapply(1L:number, function(dummy) {
-      id <- sample(nrow(testdata), sampleSize)
-      subdf <- testdata[id, , drop = FALSE]
-      trainResult$control$summaryFunction(subdf, lev = lev, model = trainResult)[metric]
-    })
-    
-    metricCI <- lciHelper(samples, confLevel, confGamma, sampleSize, subsampleSizes, metric)
+    ## ci
+    metricCI <- lciHelper(estimates, confLevel, confGamma, sampleSize, subsampleSizes, metric)
   }
   
   metricCI
 }
 
-lciHelper <- function(samples, confLevel, confGamma, sampleSize, subsampleSizes, metric) {
-  Tn <- mean(samples)
+lciHelper <- function(estimates, confLevel, confGamma, sampleSize, subsampleSizes, metric) {
+  Tn <- mean(estimates)
   Tao_n <- sampleSize ^ confGamma
   Tao_b <- subsampleSizes ^ confGamma
   
-  obj_std <- Tao_b * (samples - Tn)
+  obj_std <- Tao_b * (estimates - Tn)
   x <- seq(from = min(obj_std), to = max(obj_std), length.out = 1000L)
   
   Ln <- sapply(x, function(x) mean(obj_std <= x))
@@ -158,23 +165,33 @@ lciHelper <- function(samples, confLevel, confGamma, sampleSize, subsampleSizes,
   metricCI
 }
 
-estimateGamma <- function(samples, sizes, method) {
-  samples <- (samples - min(samples)) / (max(samples) - min(samples))
+estimateGamma <- function(subsamples, subsizes, method, estimates) {
+  subsamples <- (subsamples - min(subsamples)) / (max(subsamples) - min(subsamples))
+  
+  if (method == "skewness") {
+    requireNamespaceQuietStop("e1071")
+    size <- length(estimates)
+    sk <- e1071::skewness(estimates)
+    ## standard error of skewness
+    se <- sqrt((6 * size * (size - 1)) / ((size - 2) * (size + 1) * (size + 3)))
+    S <- abs(sk / se)
+    method <- if (S > 1.96) "quantile" else "range"
+  }
   
   if (method == "range") {
-    q1 <- t(apply(samples, 2L, quantile, probs = seq(from = 0.25, to = 0.01, length.out = 10L)))
-    q2 <- t(apply(samples, 2L, quantile, probs = seq(from = 0.75, to = 0.99, length.out = 10L)))
+    q1 <- t(apply(subsamples, 2L, quantile, probs = seq(from = 0.25, to = 0.01, length.out = 10L)))
+    q2 <- t(apply(subsamples, 2L, quantile, probs = seq(from = 0.75, to = 0.99, length.out = 10L)))
     y_ij <- log(q2 - q1)
     
   } else {
-    q0 <- t(apply(samples, 2L, quantile, probs = seq(from = 0.75, to = 0.95, length.out = 15L)))
+    q0 <- t(apply(subsamples, 2L, quantile, probs = seq(from = 0.75, to = 0.95, length.out = 15L)))
     y_ij <- log(q0)
   }
   
   y_ij[is.infinite(y_ij)] <- NA
   y_i. <- rowMeans(y_ij, na.rm = TRUE)
   y_bar <- mean(y_ij, na.rm = TRUE)
-  log_bin <- log(sizes)
+  log_bin <- log(subsizes)
   log_bar <- mean(log_bin)
   denominator <- sum((log_bin - log_bar)^2)
   gamma <- (-sum((y_i. - y_bar) * (log_bin - log_bar))) / denominator

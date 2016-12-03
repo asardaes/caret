@@ -141,7 +141,7 @@
 #' @param confLevel Confidence level for the confidence interval.
 #' @param confGamma Normalization exponent for "L" confidence interval. A string means it will be
 #'   estimated and returned in the \code{\link{train}} result's \code{control}. Valid options are
-#'   "range" and "quantile".
+#'   "range", "quantile" and "skewness".
 #' @return An echo of the parameters specified
 #' @author Max Kuhn
 #' @references Efron (1983). ``Estimating the error rate of a prediction rule:
@@ -230,7 +230,7 @@ trainControl <- function(method = "boot",
                          trim = FALSE,
                          allowParallel = TRUE,
                          confLevel = NULL,
-                         confGamma = "range")
+                         confGamma = "skewness")
 {
   if(is.null(selectionFunction)) stop("null selectionFunction values not allowed")
   if(!(returnResamp %in% c("all", "final", "none"))) stop("incorrect value of returnResamp")

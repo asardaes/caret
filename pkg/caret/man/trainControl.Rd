@@ -15,7 +15,7 @@ trainControl(method = "boot", number = ifelse(grepl("cv", method), 10, 25),
   indexOut = NULL, indexFinal = NULL, timingSamps = 0,
   predictionBounds = rep(FALSE, 2), seeds = NA, adaptive = list(min = 5,
   alpha = 0.05, method = "gls", complete = TRUE), trim = FALSE,
-  allowParallel = TRUE, confLevel = NULL, confGamma = "range")
+  allowParallel = TRUE, confLevel = NULL, confGamma = "skewness")
 }
 \arguments{
 \item{method}{The resampling method: \code{"boot"}, \code{"boot632"},
@@ -129,7 +129,7 @@ the function use it?}
 
 \item{confGamma}{Normalization exponent for "L" confidence interval. A string means it will be
 estimated and returned in the \code{\link{train}} result's \code{control}. Valid options are
-"range" and "quantile".}
+"range", "quantile" and "skewness".}
 }
 \value{
 An echo of the parameters specified

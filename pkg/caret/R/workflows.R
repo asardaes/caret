@@ -65,7 +65,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
   estimateGamma <- FALSE
   if(!is.null(ctrl$confLevel)) {
     if(is.character(ctrl$confGamma)) {
-      ctrl$confGamma <- match.arg(ctrl$confGamma, c("range", "quantile"))
+      ctrl$confGamma <- match.arg(ctrl$confGamma, c("range", "quantile", "skewness"))
       estimateGamma <- TRUE
       
       ## subsamples for LCI
@@ -77,8 +77,8 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
         subsampleSizes <- round(seq(from = ss, to = 1L, length.out = 21L))
         subsampleSizes <- subsampleSizes[-21L]
       }
-    } else if(!is.numeric(ctrl$confGamma) || ctrl$confGamma <= 0)
-      stop("confGamma must be numeric and greater than zero if provided")
+    } else if(!is.numeric(ctrl$confGamma) || ctrl$confGamma <= 0 || ctrl$confGamma >= 1)
+      stop("confGamma must be numeric and between 0 and 1 if provided")
   }
   
   ## For 632 estimator, add an element to the index of zeros to trick it into
@@ -544,20 +544,10 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
     })
   }
   
-  ## final estimate for LCI exponent
-  if(estimateGamma) {
+  ## final subsamples
+  if (estimateGamma) {
     subsamples <- rbind.fill(result[names(result) == "subsamples"])
-    id_sub <- grepl("^\\.sub", colnames(subsamples))
-    subsamples <- split(subsamples, as.list(subsamples[ , !id_sub, drop = FALSE]))
-    gamma <- sapply(subsamples, function(samples) {
-      samples <- as.matrix(samples[ , id_sub, drop = FALSE])
-      
-      estimateGamma(samples, subsampleSizes, ctrl$confGamma)
-    })
-    
-    subsamples <- lapply(subsamples, function(x) x[1L, !id_sub, drop = FALSE])
-    subsamples <- data.frame(rbind.fill(subsamples), gamma = gamma)
-    
+    attr(subsamples, "subsizes") <- subsampleSizes
   } else subsamples <- NULL
   
   list(performance = out, resamples = resamples, predictions = if(keep_pred) pred else NULL, subsamples = subsamples)

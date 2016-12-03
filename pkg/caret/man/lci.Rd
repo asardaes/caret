@@ -6,7 +6,7 @@
 \usage{
 lci(trainResult, confLevel = trainResult$control$confLevel, ...,
   confGamma = if (is.null(newdata)) trainResult$control$confGamma else
-  "range", newdata = NULL, newoutcome = NULL, number = 100L)
+  "skewness", newdata = NULL, newoutcome = NULL, number = 100L)
 }
 \arguments{
 \item{trainResult}{An object returned by \code{\link{train}}.}
@@ -15,14 +15,14 @@ lci(trainResult, confLevel = trainResult$control$confLevel, ...,
 
 \item{...}{Further arguments for \code{\link[stats]{predict}} when \code{newdata} is provided.}
 
-\item{confGamma}{The normalization exponent. To estimate, use "range" or "quantile", otherwise
-provide the numeric value. See details.}
+\item{confGamma}{The normalization exponent. To estimate, use "range", "quantile" or "skewness",
+otherwise provide the numeric value. See details.}
 
 \item{newdata}{New data to use to calculate the interval.}
 
 \item{newoutcome}{The outcomes corresponding to \code{newdata}.}
 
-\item{number}{Number of subsamples for the calculation of the interval. Only relevant if
+\item{number}{Number of subsamples for the calculation of the interval. Only relevant if 
 \code{newdata} is provided.}
 }
 \description{
@@ -31,13 +31,16 @@ Calculate a confidence interval based on subsampling.
 \details{
 The confidence interval, denoted here as LCI, is based on Politis and Romano (1994).
 
-It requires almost no additional overhead for the calculations, but it is not entirely
-nonparametric. The normalization exponent \code{confGamma} should be set according to the
-expected sampling distribution of the statistic (in this case \code{metric}). A value of 0.5
-would assume normality. It can be estimated during training using the range or quantile methods
-discussed in Bertail, Politis and Romano (1999), which requires more memory since it must create
-a matrix with 20 columns and (number of replications * number of tunning parameter combinations)
-rows.
+It requires almost no additional overhead for the calculations, but it is not entirely 
+nonparametric. The normalization exponent \code{confGamma} should be set according to the 
+expected sampling distribution of the statistic (in this case \code{metric}). A value of 0.5 
+would assume normality. It can be estimated during training using the "range" or "quantile"
+methods discussed in Bertail, Politis and Romano (1999), which requires more memory since it must
+create a matrix with 20 columns and (number of replications * number of tunning parameter
+combinations) rows.
+
+Specifying "skewness" tries to decide which estimation method to use based on the skewness of the
+resampling distribution (requires \pkg{e1071} package).
 
 If the resulting confidence interval is \code{NULL}, it means no cross-validation was done, or it
 is unsupported (e.g \code{oob}). If it has infinite values, it could be due to:
