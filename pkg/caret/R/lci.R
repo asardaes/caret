@@ -10,7 +10,7 @@
 #' would assume normality. It can be estimated during training using the range or quantile methods
 #' discussed in Bertail, Politis and Romano (1999), which requires more memory since it must create
 #' a matrix with 20 columns and (number of replications * number of tunning parameter combinations)
-#' rows. In general, the quantile method is only valid for metrics that are strictly positive.
+#' rows.
 #' 
 #' If the resulting confidence interval is \code{NULL}, it means no cross-validation was done, or it
 #' is unsupported (e.g \code{oob}). If it has infinite values, it could be due to:
@@ -60,22 +60,23 @@
 #' @export
 #'   
 lci <- function(trainResult, confLevel = trainResult$control$confLevel, ..., 
-                confGamma = if(is.null(newdata)) trainResult$control$confGamma else "range",
+                confGamma = if (is.null(newdata)) trainResult$control$confGamma else "range",
                 newdata = NULL, newoutcome = NULL, number = 100L)
 {
-  if(is.null(confLevel)) return(NULL)
-  if(xor(is.null(newdata), is.null(newoutcome))) stop("New data and new outcome have to be provided together")
+  if (is.null(confLevel)) return(NULL)
+  if (xor(is.null(newdata), is.null(newoutcome))) stop("New data and new outcome have to be provided together")
   
   metric <- trainResult$metric
   subsampleSizes <- lengths(trainResult$control$indexOut) ## replaced when gamma is re-estimated
   
-  if(is.null(newdata)) {
+  if (is.null(newdata)) {
     ## re-compute with original data, maybe with a new confLevel
-    if(!is.numeric(confGamma) || confGamma <= 0) stop("confGamma must be provided and must be positive in this context")
+    if (!is.numeric(confGamma) || confGamma <= 0 || confGamma >= 1)
+      stop("confGamma must be provided and must be between 0 and 1 in this context")
     
     sampleSize <- nrow(trainResult$trainingData)
     
-    if(!is.null(trainResult$resample)) {
+    if (!is.null(trainResult$resample)) {
       ## final estimate given by training might not be simply the average value
       originalEstimate <- merge(trainResult$results, trainResult$bestTune)[[metric]]
       
@@ -89,20 +90,20 @@ lci <- function(trainResult, confLevel = trainResult$control$confLevel, ...,
     
   } else {
     ## in case the confidence interval is based on new, hopefully unseen data...
-    if(is.character(confGamma))
+    if (is.character(confGamma))
       confGamma <- match.arg(confGamma, c("range", "quantile"))
-    else if(!is.numeric(confGamma) || confGamma <= 0)
-      stop("confGamma must be provided and must be positive if not estimated")
+    if (!is.numeric(confGamma) || confGamma <= 0 || confGamma >= 1)
+      stop("confGamma must be provided and must be between 0 and 1 if not estimated")
     
     testdata <- data.frame(obs = newoutcome, 
                            pred = stats::predict(trainResult, newdata = newdata, ...))
     
-    sampleSize <- round(nrow(testdata) ^ (2/3))
+    sampleSize <- round(1.5 * nrow(testdata) ^ (2/3))
     
-    if(is.character(confGamma)) {
+    if (is.character(confGamma)) {
       subsampleSizes <- round(nrow(testdata) ^ (1 / 2 * ((1 + (1:20) / (20 + 1)))))
       
-      if(any(subsampleSizes > sampleSize)) {
+      if (any(subsampleSizes > sampleSize)) {
         subsampleSizes <- round(seq(from = sampleSize, to = 1, length.out = 21L))
         subsampleSizes <- subsampleSizes[-21L]
       }
@@ -158,13 +159,15 @@ lciHelper <- function(samples, confLevel, confGamma, sampleSize, subsampleSizes,
 }
 
 estimateGamma <- function(samples, sizes, method) {
-  if(method == "range") {
-    q1 <- t(apply(samples, 2L, quantile, probs = seq(from = 0.25, to = 0.01, length.out = 10)))
-    q2 <- t(apply(samples, 2L, quantile, probs = seq(from = 0.75, to = 0.99, length.out = 10)))
+  samples <- (samples - min(samples)) / (max(samples) - min(samples))
+  
+  if (method == "range") {
+    q1 <- t(apply(samples, 2L, quantile, probs = seq(from = 0.25, to = 0.01, length.out = 10L)))
+    q2 <- t(apply(samples, 2L, quantile, probs = seq(from = 0.75, to = 0.99, length.out = 10L)))
     y_ij <- log(q2 - q1)
     
   } else {
-    q0 <- t(apply(samples, 2L, quantile, probs = seq(from = 0.75, to = 0.95, length.out = 15)))
+    q0 <- t(apply(samples, 2L, quantile, probs = seq(from = 0.75, to = 0.95, length.out = 15L)))
     y_ij <- log(q0)
   }
   
@@ -173,6 +176,8 @@ estimateGamma <- function(samples, sizes, method) {
   y_bar <- mean(y_ij, na.rm = TRUE)
   log_bin <- log(sizes)
   log_bar <- mean(log_bin)
-  confGamma <- sum((log_bin - log_bar)^2) # denominator
-  (-sum((y_i. - y_bar) * (log_bin - log_bar))) / confGamma
+  denominator <- sum((log_bin - log_bar)^2)
+  gamma <- (-sum((y_i. - y_bar) * (log_bin - log_bar))) / denominator
+  if (gamma < 0) gamma <- NA
+  gamma
 }

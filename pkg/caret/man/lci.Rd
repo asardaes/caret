@@ -37,7 +37,7 @@ expected sampling distribution of the statistic (in this case \code{metric}). A 
 would assume normality. It can be estimated during training using the range or quantile methods
 discussed in Bertail, Politis and Romano (1999), which requires more memory since it must create
 a matrix with 20 columns and (number of replications * number of tunning parameter combinations)
-rows. In general, the quantile method is only valid for metrics that are strictly positive.
+rows.
 
 If the resulting confidence interval is \code{NULL}, it means no cross-validation was done, or it
 is unsupported (e.g \code{oob}). If it has infinite values, it could be due to:
