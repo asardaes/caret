@@ -551,7 +551,7 @@ print.confusionMatrix.train <- function(x, digits = 1, ...){
       metricCI <- formatC(metricCI)
       
       if(!is.infinite(x$metricCI[3])) {
-        lhs <- paste(c(names(metricCI)[1], paste0(metricCI[2], "% CI")), ":")
+        lhs <- paste(c(paste(names(metricCI)[1], "(average)"), paste0(metricCI[2], "% CI")), ":")
         lhs <- format(lhs, justify = "right")
         out <- cbind(lhs, c(metricCI[1], paste0("(", metricCI[3], ", ", metricCI[4], ")")))
       } else out <- cbind(names(metricCI)[1], ":", metricCI[1])
@@ -560,7 +560,6 @@ print.confusionMatrix.train <- function(x, digits = 1, ...){
 
     dimnames(out) <- list(rep("", nrow(out)), rep("", ncol(out)))
     print(out, quote = FALSE)
-    cat("\n")
   }
   invisible(x)
 }
