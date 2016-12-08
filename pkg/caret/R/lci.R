@@ -23,8 +23,9 @@
 #'     appropriately in \code{\link{trainControl}}.
 #'   \item The confidence level (\code{confLevel}) is too high. Could be solved with the above, or
 #'     by decreasing the confidence level.
-#'   \item The chosen metric is not very smooth. Look at its histogram using the \code{resample}
-#'     element of \code{\link{train}}'s output.
+#'   \item The chosen metric is not very smooth. Look at its histogram using the \code{resample} 
+#'   element of \code{\link{train}}'s output.
+#'   (\code{hist(trainObject$resample[[trainObject$metric]])})
 #' }
 #' 
 #' If a custom \code{summaryFunction} is provided, please make sure its output has at least one
@@ -34,7 +35,7 @@
 #' @note 
 #' 
 #' The resampling results of training need to be available for this calculations to be feasible.
-#' These interval has asymptotic convergence, so the more replications, the better.
+#' This interval has asymptotic convergence, so the more replications, the better.
 #' 
 #' The value given to \code{\link{train}} in \code{trControl$confLevel} is the one that is used for
 #' the calculation during training. This can be changed when calling this function.
@@ -66,7 +67,7 @@ lci <- function(trainResult, confLevel = trainResult$control$confLevel, ...,
                 confGamma = if (is.null(newdata)) trainResult$control$confGamma else "skewness",
                 newdata = NULL, newoutcome = NULL, number = 100L)
 {
-  if (class(trainResult) != "train") stop("Invalid train object provided")
+  if (!inherits(trainResult, "train")) stop("Invalid train object provided")
   if (is.null(confLevel)) return(NULL)
   if (xor(is.null(newdata), is.null(newoutcome))) stop("New data and new outcome have to be provided together")
   
@@ -141,6 +142,12 @@ lci <- function(trainResult, confLevel = trainResult$control$confLevel, ...,
 }
 
 lciHelper <- function(estimates, confLevel, confGamma, sampleSize, subsampleSizes, metric) {
+  if (!is.numeric(confGamma) || is.na(confGamma) || any(is.na(estimates)) || any(is.nan(estimates))) {
+    metricCI <- c(Inf, confLevel, -Inf, Inf)
+    names(metricCI) <- c(metric, "ConfLevel", "Lower", "Upper")
+    return(metricCI)
+  }
+  
   Tn <- mean(estimates)
   Tao_n <- sampleSize ^ confGamma
   Tao_b <- subsampleSizes ^ confGamma
@@ -166,6 +173,17 @@ lciHelper <- function(estimates, confLevel, confGamma, sampleSize, subsampleSize
 }
 
 estimateGamma <- function(subsamples, subsizes, method, estimates) {
+  invalidSubsamples <- colSums(is.na(subsamples)) + colSums(is.nan(subsamples))
+  
+  if (sum(invalidSubsamples == 0) < 10L) {
+    warning("Unable to estimate gamma for confidence interval, invalid subsample metrics obtained.")
+    return(NA_real_)
+    
+  } else {
+    validColumns <- invalidSubsamples == 0
+    subsamples <- subsamples[, validColumns, drop = FALSE]
+  }
+  
   subsamples <- (subsamples - min(subsamples)) / (max(subsamples) - min(subsamples))
   
   if (method == "skewness") {
@@ -191,10 +209,10 @@ estimateGamma <- function(subsamples, subsizes, method, estimates) {
   y_ij[is.infinite(y_ij)] <- NA
   y_i. <- rowMeans(y_ij, na.rm = TRUE)
   y_bar <- mean(y_ij, na.rm = TRUE)
-  log_bin <- log(subsizes)
+  log_bin <- log(subsizes[validColumns])
   log_bar <- mean(log_bin)
   denominator <- sum((log_bin - log_bar)^2)
   gamma <- (-sum((y_i. - y_bar) * (log_bin - log_bar))) / denominator
-  if (gamma < 0) gamma <- NA
+  if (gamma < 0) gamma <- NA_real_
   gamma
 }

@@ -76,6 +76,14 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
       if(any(ss < subsampleSizes)) {
         subsampleSizes <- round(seq(from = ss, to = 1L, length.out = 21L))
         subsampleSizes <- subsampleSizes[-21L]
+        smallSubsamples <- subsampleSizes < (2 * length(lev))
+        
+        if (sum(smallSubsamples) > 5) {
+          warning("Dataset too small to use subsamples for confidence interval.")
+          ctrl$confLevel <- NULL
+        } else {
+          subsampleSizes <- subsampleSizes[1L:15L]
+        }
       }
     } else if(!is.numeric(ctrl$confGamma) || ctrl$confGamma <= 0 || ctrl$confGamma >= 1)
       stop("confGamma must be numeric and between 0 and 1 if provided")
@@ -385,13 +393,15 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
         
         ## subsample metrics for LCI
         if(estimateGamma && names(resampleIndex)[iter] != "AllData") {
-          id_subsampleSizes <- lapply(subsampleSizes, function(n) sample(nrow(predicted[[1]]), n))
+          id_subsampleSizes <- lapply(subsampleSizes, function(n) sample(nrow(predicted[[1L]]), n))
           thisSubsample <- lapply(predicted, function(tmp) {
-            sapply(id_subsampleSizes, function(id) ctrl$summaryFunction(tmp[id, , drop = FALSE], lev = lev, model = method)[metric] )
+            sapply(id_subsampleSizes, function(id) {
+              ctrl$summaryFunction(tmp[id, , drop = FALSE], lev = lev, model = method)[metric]
+            })
           })
           thisSubsample <- do.call(rbind, thisSubsample)
           thisSubsample <- cbind(allParam, thisSubsample)
-          colnames(thisSubsample) <- c(colnames(allParam), paste0(".sub", 1:20))
+          colnames(thisSubsample) <- c(colnames(allParam), paste0(".sub", seq_len(length(subsampleSizes))))
           
         } else thisSubsample <- NULL
         
@@ -461,7 +471,7 @@ nominalTrainWorkflow <- function(x, y, wts, info, method, ppOpts, ctrl, lev, met
             ctrl$summaryFunction(tmp[id, , drop = FALSE], lev = lev, model = method)[metric]
           })
           thisSubsample <- cbind(info$loop[parm, , drop = FALSE], rbind(thisSubsample))
-          colnames(thisSubsample) <- c(colnames(info$loop), paste0(".sub", 1:20))
+          colnames(thisSubsample) <- c(colnames(info$loop), paste0(".sub", seq_len(length(subsampleSizes))))
           
         } else thisSubsample <- NULL
         

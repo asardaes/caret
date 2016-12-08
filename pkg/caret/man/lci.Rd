@@ -50,8 +50,9 @@ is unsupported (e.g \code{oob}). If it has infinite values, it could be due to:
     appropriately in \code{\link{trainControl}}.
   \item The confidence level (\code{confLevel}) is too high. Could be solved with the above, or
     by decreasing the confidence level.
-  \item The chosen metric is not very smooth. Look at its histogram using the \code{resample}
-    element of \code{\link{train}}'s output.
+  \item The chosen metric is not very smooth. Look at its histogram using the \code{resample} 
+  element of \code{\link{train}}'s output.
+  (\code{hist(trainObject$resample[[trainObject$metric]])})
 }
 
 If a custom \code{summaryFunction} is provided, please make sure its output has at least one
@@ -60,7 +61,7 @@ otherwise it might not be detected correctly.
 }
 \note{
 The resampling results of training need to be available for this calculations to be feasible.
-These interval has asymptotic convergence, so the more replications, the better.
+This interval has asymptotic convergence, so the more replications, the better.
 
 The value given to \code{\link{train}} in \code{trControl$confLevel} is the one that is used for
 the calculation during training. This can be changed when calling this function.
